@@ -23,7 +23,11 @@ export function useDashboard(locationId) {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      supabase.from("employee_hours").select("*").eq("location_id", locationId).eq("week_start", week),
+      supabase
+        .from("timesheet_entries")
+        .select("clock_hours_other, clock_hours, hrs_turned_other, hrs_turned_here")
+        .eq("location_id", locationId)
+        .eq("week_start", week),
       supabase
         .from("documents")
         .select("id", { count: "exact", head: true })

@@ -3,7 +3,7 @@ import { Banknote, Clock } from "lucide-react";
 import { useDashboard } from "../hooks/useDashboard.js";
 import { computeTotals } from "../lib/drawerMath.js";
 import { money } from "../lib/format.js";
-import { sumDays, thisWeekStart, weekLabel } from "../lib/weekUtils.js";
+import { thisWeekStart, weekLabel } from "../lib/weekUtils.js";
 import { Card, SectionHeader } from "./ui.jsx";
 
 function StatCard({ label, value, sub, tone }) {
@@ -21,8 +21,12 @@ export function DashboardView({ store }) {
   const { latestDrawer, weekRows, docCount, loading, error } = useDashboard(store.id);
 
   const totals = latestDrawer ? computeTotals(latestDrawer, store.drawer_float) : null;
-  const wkHours = weekRows.reduce((a, r) => a + sumDays(r), 0);
-  const turned = weekRows.reduce((a, r) => a + (Number(r.hours_turned) || 0), 0);
+  const wkHours = weekRows.reduce(
+    (a, r) => a + (Number(r.clock_hours_other) || 0) + (Number(r.clock_hours) || 0), 0
+  );
+  const turned = weekRows.reduce(
+    (a, r) => a + (Number(r.hrs_turned_other) || 0) + (Number(r.hrs_turned_here) || 0), 0
+  );
   const week = thisWeekStart();
 
   return (
