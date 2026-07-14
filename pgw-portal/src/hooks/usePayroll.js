@@ -17,6 +17,7 @@ export function usePayroll(locationId, weekStart) {
   const [rates, setRates] = useState({});           // employee_id -> pay_rate row (privileged)
   const [pays, setPays] = useState({});             // entry_id    -> timesheet_pay row (privileged)
   const [rpcSummary, setRpcSummary] = useState(null); // store users: percentages only
+  const [flatFlags, setFlatFlags] = useState({});      // store users: employee_id -> bool
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -67,14 +68,20 @@ export function usePayroll(locationId, weekStart) {
       setRates(rateMap);
       setPays(payMap);
       setRpcSummary(null);
+      setFlatFlags({});
     } else {
-      // Store/district/regional: percentages come from the RPC — no dollars.
-      const { data, error: rpcErr } = await supabase.rpc("payroll_pct_summary", {
-        loc: locationId,
-        wk: weekStart,
-      });
-      if (rpcErr) setRpcSummary(null);
-      else setRpcSummary(Array.isArray(data) ? data[0] ?? null : data ?? null);
+      // Store/district/regional: percentages + FLAT flags come from RPCs —
+      // only aggregates and booleans, never rates or dollars.
+      const [sumRes, flagRes] = await Promise.all([
+        supabase.rpc("payroll_pct_summary", { loc: locationId, wk: weekStart }),
+        supabase.rpc("flat_flags_for_week", { loc: locationId, wk: weekStart }),
+      ]);
+      if (sumRes.error) setRpcSummary(null);
+      else setRpcSummary(Array.isArray(sumRes.data) ? sumRes.data[0] ?? null : sumRes.data ?? null);
+
+      const flagMap = {};
+      for (const f of flagRes.data ?? []) flagMap[f.employee_id] = f.flat_flag;
+      setFlatFlags(flagMap);
     }
 
     setLoading(false);
@@ -205,6 +212,7 @@ export function usePayroll(locationId, weekStart) {
     rows,
     privileged,
     rpcSummary,
+    flatFlags,
     loading,
     error,
     addEmployee,

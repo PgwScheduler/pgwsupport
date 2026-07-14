@@ -29,7 +29,7 @@ function Th({ children, className = "" }) {
 export function HoursView({ store }) {
   const [week, setWeek] = useState(() => thisWeekStart());
   const {
-    rows, privileged, rpcSummary, loading, error,
+    rows, privileged, rpcSummary, flatFlags, loading, error,
     addEmployee, updateEmployee, removeEmployee, saveEntry, saveRate, savePay,
   } = usePayroll(store.id, week);
 
@@ -75,9 +75,14 @@ export function HoursView({ store }) {
         const entry = { ...r.entry, ...o };
         const rate = { ...(r.rate || {}), ...o };
         const pay = { ...(r.pay || {}), ...o };
-        return { ...r, mEntry: entry, mRate: rate, mPay: pay };
+        // FLAT flag: privileged compute it locally from rates; store users
+        // get just the boolean from the flat_flags_for_week RPC.
+        const flatFlag = privileged
+          ? computePayRow(entry, rate, pay).flatFlag
+          : !!flatFlags[r.employee.id];
+        return { ...r, mEntry: entry, mRate: rate, mPay: pay, flatFlag };
       }),
-    [rows, ov]
+    [rows, ov, privileged, flatFlags]
   );
 
   // Master/admin: dollars + percentages computed live. Store: RPC percentages.
@@ -170,6 +175,7 @@ export function HoursView({ store }) {
               <Th>% Goal</Th>
               <Th>WOs</Th>
               <Th>ARO</Th>
+              <Th>FLAT</Th>
               {privileged && (
                 <>
                   <Th className="border-l border-slate-700">Rate / Sal</Th>
@@ -181,7 +187,6 @@ export function HoursView({ store }) {
                   <Th>Bonus</Th>
                   <Th>Incent.</Th>
                   <Th>Paycheck</Th>
-                  <Th></Th>
                 </>
               )}
               <Th></Th>
@@ -241,6 +246,11 @@ export function HoursView({ store }) {
                   <td className={compCell}>{pct(sc.pctOfGoal)}</td>
                   <NumCell {...{ empId, field: "work_orders", val, commit, server: r.mEntry.work_orders }} />
                   <td className={compCell}>{sc.aro == null ? "—" : sc.aro.toFixed(2)}</td>
+                  <td className="px-1 py-1.5 text-center">
+                    {r.flatFlag && (
+                      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ backgroundColor: T.accentSoftBg, color: T.accentSoftText }}>FLAT</span>
+                    )}
+                  </td>
 
                   {privileged && (
                     <>
@@ -264,11 +274,6 @@ export function HoursView({ store }) {
                       <NumCell {...{ empId, field: "bonus", val, commit, server: r.mPay.bonus }} />
                       <NumCell {...{ empId, field: "incentives", val, commit, server: r.mPay.incentives }} />
                       <td className={compCell} style={{ color: T.accentSoftText }}>{money(pc.paycheck)}</td>
-                      <td className="px-1 py-1.5 text-center">
-                        {pc.flatFlag && (
-                          <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ backgroundColor: T.accentSoftBg, color: T.accentSoftText }}>FLAT</span>
-                        )}
-                      </td>
                     </>
                   )}
 
@@ -282,14 +287,14 @@ export function HoursView({ store }) {
             })}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={privileged ? 26 : 16} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={privileged ? 26 : 17} className="px-4 py-10 text-center text-sm text-slate-500">
                   No employees on the roster yet. Add one below to start the week.
                 </td>
               </tr>
             )}
             {loading && (
               <tr>
-                <td colSpan={privileged ? 26 : 16} className="px-4 py-10 text-center text-sm text-slate-500">Loading…</td>
+                <td colSpan={privileged ? 26 : 17} className="px-4 py-10 text-center text-sm text-slate-500">Loading…</td>
               </tr>
             )}
           </tbody>

@@ -12,11 +12,11 @@ const d2 = (n) => (n == null ? "—" : Number(n).toFixed(2));
 const STORE_HEAD = [
   "Position", "Employee", "PTO Days", "Clock Hrs Other", "Clock Hrs Here", "Total Hours",
   "Turned Other", "Turned Here", "Total Turned", "Productivity",
-  "Actual Sales", "Sales Required", "% of Goal", "Work Orders", "ARO",
+  "Actual Sales", "Sales Required", "% of Goal", "Work Orders", "ARO", "FLAT",
 ];
 const PAY_HEAD = [
   "Hourly Rate", "Flat Rate", "Hourly Earned", "OT Earned", "Total Hourly",
-  "Total Flat", "Bonus", "Incentives", "Paycheck", "FLAT",
+  "Total Flat", "Bonus", "Incentives", "Paycheck",
 ];
 
 function storeCells(row) {
@@ -28,20 +28,18 @@ function storeCells(row) {
     e.hrs_turned_other ?? 0, e.hrs_turned_here ?? 0, c.totalTurned,
     c.productivity == null ? "—" : c.productivity.toFixed(2),
     e.actual_sales ?? 0, e.sales_required ?? "", pct(c.pctOfGoal), e.work_orders ?? 0,
-    c.aro == null ? "—" : c.aro.toFixed(2),
+    c.aro == null ? "—" : c.aro.toFixed(2), row.flatFlag ? "FLAT" : "",
   ];
 }
 
 function payCells(row) {
   const p = computePayRow(row.entry, row.rate, row.pay);
   if (p.manager) {
-    return [d2(p.hourlyRate) === "—" ? "x" : "x", "x", "x", "x", "x", "x",
-      d2(p.bonus), d2(p.incentives), money(p.paycheck), ""];
+    return ["x", "x", "x", "x", "x", "x", d2(p.bonus), d2(p.incentives), money(p.paycheck)];
   }
   return [
     d2(p.hourlyRate), d2(p.flatRate), money(p.hourlyEarned), money(p.otEarned),
-    money(p.totalHourly), money(p.totalFlat), d2(p.bonus), d2(p.incentives),
-    money(p.paycheck), p.flatFlag ? "FLAT" : "",
+    money(p.totalHourly), money(p.totalFlat), d2(p.bonus), d2(p.incentives), money(p.paycheck),
   ];
 }
 
