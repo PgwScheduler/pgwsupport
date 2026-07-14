@@ -59,6 +59,20 @@ export function useUserManagement() {
     return { data };
   }, []);
 
+  /* Clears role + scope so RLS denies them everywhere; doesn't touch their
+     Supabase Auth login (that would need the service_role key). Reversible
+     by just assigning a role again. */
+  const revokeAccess = useCallback(async (id) => {
+    const patch = { role: null, location_id: null, district_id: null, region_id: null };
+    const { data, error } = await supabase.from("profiles").update(patch).eq("id", id).select(PROFILE_SELECT).single();
+    if (error) {
+      setError(error.message);
+      return { error };
+    }
+    setUsers((prev) => prev.map((u) => (u.id === id ? data : u)));
+    return { data };
+  }, []);
+
   const createUser = useCallback(async ({ email, full_name, role, scopeId }) => {
     const tempPassword = generateTempPassword();
     const { data: signUpData, error: signUpError } = await authOnlyClient.auth.signUp({
@@ -93,5 +107,5 @@ export function useUserManagement() {
     return { data: profileData, tempPassword };
   }, []);
 
-  return { users, regions, districts, stores, loading, error, updateAssignment, createUser, refetch: fetchAll };
+  return { users, regions, districts, stores, loading, error, updateAssignment, createUser, revokeAccess, refetch: fetchAll };
 }

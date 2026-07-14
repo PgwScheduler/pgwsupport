@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { Check, Copy, UserPlus, X } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Check, Copy, ShieldOff, UserPlus, X } from "lucide-react";
+import { useAuth } from "../../context/AuthProvider.jsx";
 import { useUserManagement } from "../../hooks/useUserManagement.js";
 import { ROLE_LABELS } from "../Shell.jsx";
 import { Card, Field, GhostBtn, PrimaryBtn, SectionHeader, inputCls } from "../ui.jsx";
@@ -47,10 +48,19 @@ function ScopeSelect({ role, value, onChange, regions, districts, stores }) {
 const selectCls =
   "w-full rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-500";
 
-function UserRow({ user, regions, districts, stores, onSave }) {
+function UserRow({ user, regions, districts, stores, isSelf, onSave, onRevoke }) {
   const [role, setRole] = useState(user.role || "store");
   const [scopeId, setScopeId] = useState(scopeIdOf(user));
   const [saving, setSaving] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+
+  // Resync local edit state whenever the server value changes underneath us
+  // (after a successful save, a revoke, or someone else's edit refetching).
+  const serverScopeId = scopeIdOf(user);
+  useEffect(() => {
+    setRole(user.role || "store");
+    setScopeId(serverScopeId);
+  }, [user.role, serverScopeId]);
 
   const needsScope = role === "store" || role === "district" || role === "regional";
   const dirty = role !== (user.role || "") || scopeId !== scopeIdOf(user);
@@ -65,6 +75,13 @@ function UserRow({ user, regions, districts, stores, onSave }) {
     setSaving(true);
     await onSave(user.id, role, needsScope ? scopeId : null);
     setSaving(false);
+  };
+
+  const revoke = async () => {
+    if (!window.confirm(`Revoke access for ${user.email}? They'll immediately lose access everywhere. You can reassign a role later to restore it.`)) return;
+    setRevoking(true);
+    await onRevoke(user.id);
+    setRevoking(false);
   };
 
   return (
@@ -84,9 +101,16 @@ function UserRow({ user, regions, districts, stores, onSave }) {
         <ScopeSelect role={role} value={scopeId} onChange={setScopeId} regions={regions} districts={districts} stores={stores} />
       </td>
       <td className="px-3 py-3 text-right">
-        <GhostBtn onClick={save} disabled={!canSave || saving}>
-          <Check className="h-4 w-4" /> {saving ? "Saving…" : "Save"}
-        </GhostBtn>
+        <div className="flex items-center justify-end gap-2">
+          <GhostBtn onClick={save} disabled={!canSave || saving}>
+            <Check className="h-4 w-4" /> {saving ? "Saving…" : "Save"}
+          </GhostBtn>
+          {!isSelf && user.role && (
+            <GhostBtn onClick={revoke} disabled={revoking} className="text-red-400 hover:text-red-300" title="Revoke access">
+              <ShieldOff className="h-4 w-4" /> {revoking ? "…" : "Revoke"}
+            </GhostBtn>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -182,7 +206,8 @@ function InviteModal({ regions, districts, stores, onCreate, onClose }) {
 }
 
 export function UsersView() {
-  const { users, regions, districts, stores, loading, error, updateAssignment, createUser } = useUserManagement();
+  const { user: currentUser } = useAuth();
+  const { users, regions, districts, stores, loading, error, updateAssignment, createUser, revokeAccess } = useUserManagement();
   const [inviting, setInviting] = useState(false);
 
   return (
@@ -213,7 +238,16 @@ export function UsersView() {
           </thead>
           <tbody>
             {users.map((u) => (
-              <UserRow key={u.id} user={u} regions={regions} districts={districts} stores={stores} onSave={updateAssignment} />
+              <UserRow
+                key={u.id}
+                user={u}
+                regions={regions}
+                districts={districts}
+                stores={stores}
+                isSelf={u.id === currentUser?.id}
+                onSave={updateAssignment}
+                onRevoke={revokeAccess}
+              />
             ))}
             {!loading && users.length === 0 && (
               <tr>
