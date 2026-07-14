@@ -25,7 +25,8 @@ export function useDashboard(locationId) {
         .maybeSingle(),
       supabase
         .from("timesheet_entries")
-        .select("clock_hours_other, clock_hours, hrs_turned_other, hrs_turned_here")
+        // hrs_turned_* moved to timesheet_midas (Speedee has none); embed it.
+        .select("clock_hours_other, clock_hours, timesheet_midas ( hrs_turned_other, hrs_turned_here )")
         .eq("location_id", locationId)
         .eq("week_start", week),
       supabase
@@ -40,7 +41,18 @@ export function useDashboard(locationId) {
     else setError(null);
 
     setLatestDrawer(drawerRes.data ?? null);
-    setWeekRows(hoursRes.data ?? []);
+    // Flatten the embedded timesheet_midas so weekRows stays a flat shape.
+    setWeekRows(
+      (hoursRes.data ?? []).map((r) => {
+        const m = Array.isArray(r.timesheet_midas) ? r.timesheet_midas[0] : r.timesheet_midas;
+        return {
+          clock_hours_other: r.clock_hours_other,
+          clock_hours: r.clock_hours,
+          hrs_turned_other: m?.hrs_turned_other ?? 0,
+          hrs_turned_here: m?.hrs_turned_here ?? 0,
+        };
+      })
+    );
     setDocCount(docsRes.count ?? 0);
     setLoading(false);
   }, [locationId]);
