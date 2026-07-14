@@ -1,7 +1,7 @@
 import React from "react";
 import {
   LogOut, LayoutDashboard, GraduationCap, Banknote, Clock, FileText,
-  ChevronRight, Eye, ShieldCheck, Building2,
+  ChevronRight, Eye, ShieldCheck, Building2, Users,
 } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { LogoMark, T } from "./ui.jsx";
@@ -15,7 +15,9 @@ const NAV = [
   { key: "documents", label: "Documents", icon: FileText },
 ];
 
-const ROLE_LABELS = {
+const MASTER_NAV = [{ key: "users", label: "Users", icon: Users }];
+
+export const ROLE_LABELS = {
   store: "Store Manager",
   district: "District Manager",
   regional: "Regional Manager",
@@ -53,7 +55,7 @@ export function Shell({ view, setView, children }) {
             <p className="mt-1.5 text-[11px] uppercase tracking-widest text-slate-500">Operations Portal</p>
           </div>
           <nav className="space-y-1">
-            {NAV.map((n) => {
+            {[...NAV, ...(role === "master" ? MASTER_NAV : [])].map((n) => {
               const active = view === n.key;
               return (
                 <button

@@ -9,6 +9,7 @@ import { HoursView } from "./components/HoursView.jsx";
 import { DrawerView } from "./components/drawer/DrawerView.jsx";
 import { DocumentsView } from "./components/DocumentsView.jsx";
 import { TrainingView } from "./components/TrainingView.jsx";
+import { UsersView } from "./components/users/UsersView.jsx";
 
 function FullScreenMessage({ children }) {
   return (
@@ -80,6 +81,7 @@ export default function App() {
       {view === "drawer" && <DrawerView key={"drawer-" + currentStore.id} store={currentStore} />}
       {view === "documents" && <DocumentsView key={"documents-" + currentStore.id} store={currentStore} />}
       {view === "training" && <TrainingView />}
+      {view === "users" && profile.role === "master" && <UsersView />}
     </Shell>
   );
 }
