@@ -4,9 +4,13 @@
 // more importantly, whether pay data was ever fetched at all.
 import { csvEsc, downloadFile } from "./csv.js";
 import { money, pct, numOrDash } from "./format.js";
-import { computeStoreRow, computePayRow, POSITIONS } from "./payrollMath.js";
+import {
+  computeStoreRow, computePayRow, computeSpeedeeStoreRow, computeSpeedeeRefRow,
+  POSITIONS, SPEEDEE_POSITIONS,
+} from "./payrollMath.js";
 
 const posLabel = (p) => POSITIONS.find(([k]) => k === p)?.[1] ?? p;
+const speedeePosLabel = (p) => SPEEDEE_POSITIONS.find(([k]) => k === p)?.[1] ?? p;
 const d2 = (n) => (n == null ? "—" : Number(n).toFixed(2));
 
 const STORE_HEAD = [
@@ -106,6 +110,105 @@ export function printPayroll(store, week, rows, privileged, summary) {
         <div class="meta"><div><strong>Week of:</strong> ${week}</div><div>${privileged ? "Master / Admin copy" : "Store copy — no pay data"}</div></div>
       </div>
       <table><tr>${th}</tr>${body || `<tr><td colspan="${STORE_HEAD.length + (privileged ? PAY_HEAD.length : 0)}">No employees</td></tr>`}</table>
+      ${summaryHtml}
+    </body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 300);
+}
+
+// ---- Speedee -------------------------------------------------------------
+// Store copy carries no per-employee pay (hourly/reference/paycheck), but
+// DOES include labor sales (exposed by decision) and the payroll-dollar
+// TOTAL in the summary (a Speedee-brand allowance) — never an individual
+// paycheck.
+const SPEEDEE_STORE_HEAD = [
+  "Position", "Employee", "PTO Days", "Clock Hrs Other", "Clock Hrs Here", "Total Hours",
+  "Labor %", "Labor % Eligible", "Labor Sales", "Spiffs", "Total Incentive", "Sales Expectation",
+];
+const SPEEDEE_PAY_HEAD = [
+  "Hourly Rate", "Hourly Earned", "OT Earned", "Hourly & OT", "Labor % Pay", "Paycheck (entered)",
+];
+
+function speedeeStoreCells(row) {
+  const sc = computeSpeedeeStoreRow(row.mEntry, row.roleSalesRate);
+  const e = row.mEntry;
+  return [
+    speedeePosLabel(row.employee.position), row.employee.full_name || "",
+    e.pto_days ?? 0, e.clock_hours_other ?? 0, e.clock_hours ?? 0, sc.totalHours,
+    e.labor_pct_rate ?? "", row.employee.labor_pct_eligible ? "Y" : "",
+    e.labor_sales ?? "", e.spiffs ?? 0, money(sc.totalIncentive), money(sc.salesExpectation),
+  ];
+}
+
+function speedeePayCells(row) {
+  const ref = computeSpeedeeRefRow(row.mEntry, row.mRate);
+  const sc = computeSpeedeeStoreRow(row.mEntry, row.roleSalesRate);
+  const pc = row.mPay?.paycheck_amount;
+  return [
+    d2(ref.hourlyRate), money(ref.hourlyEarned), money(ref.otEarned), money(ref.hourlyAndOt),
+    money(sc.laborPctPay), pc == null ? "" : money(pc),
+  ];
+}
+
+export function exportSpeedeeCSV(store, week, rows, privileged, summary) {
+  const head = ["Store #", "Store", "Week of", ...SPEEDEE_STORE_HEAD, ...(privileged ? SPEEDEE_PAY_HEAD : [])];
+  const body = rows.map((r) => [
+    store.store_number, store.name, week, ...speedeeStoreCells(r), ...(privileged ? speedeePayCells(r) : []),
+  ]);
+  const lines = [head, ...body, []];
+  const first = rows[0] || {};
+  lines.push(["", "", "Sales Required", money(first.salesRequired ?? 0)]);
+  lines.push(["", "", "Actual Weekly Sales", money(first.actualWeeklySales ?? 0)]);
+  if (summary?.payrollDollars != null) lines.push(["", "", "Total Payroll $", money(summary.payrollDollars)]);
+  lines.push(["", "", "Payroll %", pct(summary?.payrollPct), "(target ≤ 26%)"]);
+
+  const csv = lines.map((r) => r.map(csvEsc).join(",")).join("\n");
+  downloadFile(`PGW_${store.store_number}_speedee_payroll_week_${week}.csv`, csv, "text/csv;charset=utf-8;");
+}
+
+export function printSpeedee(store, week, rows, privileged, summary) {
+  const heads = [...SPEEDEE_STORE_HEAD, ...(privileged ? SPEEDEE_PAY_HEAD : [])];
+  const th = heads.map((h) => `<th>${h}</th>`).join("");
+  const body = rows.map((r) => {
+    const cells = [...speedeeStoreCells(r), ...(privileged ? speedeePayCells(r) : [])];
+    return `<tr>${cells.map((c) => `<td>${c === "" ? "" : c}</td>`).join("")}</tr>`;
+  }).join("");
+  const first = rows[0] || {};
+  const over = summary?.payrollPct != null && summary.payrollPct > 0.26;
+  const summaryHtml = `
+    <table class="sum">
+      <tr><td>Sales Required</td><td>${money(first.salesRequired ?? 0)}</td></tr>
+      <tr><td>Actual Weekly Sales</td><td>${money(first.actualWeeklySales ?? 0)}</td></tr>
+      ${summary?.payrollDollars != null ? `<tr><td>Total Payroll $</td><td>${money(summary.payrollDollars)}</td></tr>` : ""}
+      <tr${over ? ' class="over"' : ""}><td>Payroll %</td><td>${pct(summary?.payrollPct)} <span>(≤ 26%)</span></td></tr>
+    </table>`;
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>PGW Speedee Payroll ${store.store_number} ${week}</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:24px;font-size:11px}
+      h1{font-size:17px;margin:0}
+      .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:6px}
+      .meta{text-align:right;font-size:11px;color:#444}
+      .warn{font-weight:bold;margin:6px 0 12px}
+      table{width:100%;border-collapse:collapse;margin-bottom:14px}
+      td,th{border:1px solid #bbb;padding:4px 5px;text-align:right;white-space:nowrap}
+      th{background:#eee;font-size:10px;text-align:right}
+      td:nth-child(1),td:nth-child(2),th:nth-child(1),th:nth-child(2){text-align:left}
+      .sum{width:auto} .sum td{text-align:left} .sum td:nth-child(2){text-align:right;font-weight:bold}
+      .sum span{color:#666;font-weight:normal}
+      .over td{background:#fde2e1;color:#a11}
+      @media print{body{margin:10mm}}
+    </style></head><body>
+      <div class="head">
+        <div><h1>Weekly Payroll — Speedee</h1><div>#${store.store_number} · ${store.name}</div></div>
+        <div class="meta"><div><strong>Week of:</strong> ${week}</div><div>${privileged ? "Master / Admin copy" : "Store copy — no per-employee pay"}</div></div>
+      </div>
+      <div class="warn">Do not include any holiday pay hours.</div>
+      <table><tr>${th}</tr>${body || `<tr><td colspan="${heads.length}">No employees</td></tr>`}</table>
       ${summaryHtml}
     </body></html>`;
   const w = window.open("", "_blank");

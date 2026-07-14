@@ -7,7 +7,15 @@ import {
 } from "../lib/payrollMath.js";
 import { money, pct, numOrDash } from "../lib/format.js";
 import { exportPayrollCSV, printPayroll } from "../lib/payrollExport.js";
+import { SpeedeeHoursView } from "./SpeedeeHoursView.jsx";
 import { Card, GhostBtn, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
+
+// The Employee Hours tab follows the store's brand — managers never toggle it.
+export function HoursView({ store }) {
+  return store.brand === "speedee"
+    ? <SpeedeeHoursView store={store} />
+    : <MidasHoursView store={store} />;
+}
 
 // Which mutator a field routes to.
 const ENTRY_FIELDS = [
@@ -26,12 +34,12 @@ function Th({ children, className = "" }) {
   return <th className={"px-2 py-2 text-right font-medium whitespace-nowrap " + className}>{children}</th>;
 }
 
-export function HoursView({ store }) {
+function MidasHoursView({ store }) {
   const [week, setWeek] = useState(() => thisWeekStart());
   const {
     rows, privileged, rpcSummary, flatFlags, loading, error,
     addEmployee, updateEmployee, removeEmployee, saveEntry, saveRate, savePay,
-  } = usePayroll(store.id, week);
+  } = usePayroll(store.id, week, "midas");
 
   const [ov, setOv] = useState({}); // { [employeeId]: { field: rawValue } }
   const timers = useRef({});

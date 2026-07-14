@@ -12,7 +12,7 @@ const PROFILE_SELECT = `
 `;
 
 const STORE_SELECT = `
-  id, name, address, store_number, drawer_float, district_id,
+  id, name, address, store_number, drawer_float, brand, district_id,
   district:district_id ( id, name, region_id, region:region_id ( id, name ) )
 `;
 

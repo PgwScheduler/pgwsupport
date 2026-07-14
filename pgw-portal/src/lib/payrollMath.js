@@ -18,11 +18,28 @@ export const OT_MULTIPLIER = 1.5;
 // Targets from the source sheet.
 export const TARGETS = { total: 0.26, cst: 0.1, vst: 0.16 };
 
+// Midas positions. POSITIONS kept as the Midas alias for existing callers.
 export const POSITIONS = [
   ["manager", "Manager"],
   ["front", "Front"],
   ["tech", "Tech"],
 ];
+export const MIDAS_POSITIONS = POSITIONS;
+
+export const SPEEDEE_POSITIONS = [
+  ["manager", "Manager"],
+  ["front", "Front"],
+  ["cashier", "Cashier"],
+  ["labor_pct_tech", "Labor % Tech"],
+  ["pitman", "Pitman"],
+  ["hood_tech", "Hood Tech"],
+];
+
+// Speedee holds a single payroll % target.
+export const SPEEDEE_TARGET = 0.26;
+
+export const positionsForBrand = (brand) =>
+  brand === "speedee" ? SPEEDEE_POSITIONS : MIDAS_POSITIONS;
 
 export const num = (v) => {
   const n = typeof v === "number" ? v : parseFloat(v);
@@ -134,4 +151,56 @@ export function computePayrollSummary(rows) {
   const vstPct = totalPct == null ? null : totalPct - cstPct;
 
   return { actualSales, payrollDollars, cstDollars, totalPct, cstPct, vstPct };
+}
+
+// =====================================================================
+// SPEEDEE
+// Different sheet: no hours-turned / flat-rate / work-orders. Tech pay is
+// labor-sales % + spiffs. Paychecks are ENTERED by payroll, never derived
+// here — hourly/OT figures are reference only and must not feed pay.
+// =====================================================================
+
+// Store-visible Speedee row. `roleSalesRate` comes from role_sales_rates
+// for the employee's position; labor_sales is store-visible (exposed so
+// Total Incentive isn't a hidden-but-derivable figure).
+export function computeSpeedeeStoreRow(entry, roleSalesRate) {
+  const totalHours = num(entry.clock_hours_other) + num(entry.clock_hours);
+  const laborPctPay = entry.labor_pct_eligible
+    ? num(entry.labor_pct_rate) * num(entry.labor_sales)
+    : 0;
+  const totalIncentive = num(entry.spiffs) + laborPctPay;
+  const flat = entry.sales_expectation_flat;
+  const salesExpectation =
+    flat != null && flat !== "" ? num(flat) : totalHours * num(roleSalesRate);
+  return { totalHours, laborPctPay, totalIncentive, salesExpectation };
+}
+
+// Master/admin reference figures — shown so payroll can sanity-check the
+// paycheck they key in. They NEVER feed paycheck_amount.
+export function computeSpeedeeRefRow(entry, rate) {
+  const hourlyRate = num(rate?.hourly_rate);
+  const totalHours = num(entry.clock_hours_other) + num(entry.clock_hours);
+  const regularHours = Math.min(totalHours, OT_THRESHOLD);
+  const otHours = Math.max(totalHours - OT_THRESHOLD, 0);
+  const hourlyEarned = hourlyRate * regularHours;
+  const otEarned = hourlyRate * OT_MULTIPLIER * otHours;
+  return { hourlyRate, regularHours, otHours, hourlyEarned, otEarned, hourlyAndOt: hourlyEarned + otEarned };
+}
+
+// Master/admin summary. Payroll $ is the SUM of ENTERED paychecks.
+// rows: [{ entry, pay, roleSalesRate }].
+export function computeSpeedeeSummary(rows, actualWeeklySales) {
+  let payrollDollars = 0;
+  let salesRequired = 0;
+  for (const { entry, pay, roleSalesRate } of rows) {
+    payrollDollars += num(pay?.paycheck_amount);
+    salesRequired += computeSpeedeeStoreRow(entry, roleSalesRate).salesExpectation;
+  }
+  const aws = num(actualWeeklySales);
+  return {
+    payrollDollars,
+    salesRequired,
+    actualWeeklySales: aws,
+    payrollPct: safeDiv(payrollDollars, aws),
+  };
 }
