@@ -20,8 +20,8 @@ export function Field({ label, children }) {
   );
 }
 
-export function Card({ children, className = "" }) {
-  return <div className={"rounded-xl border border-slate-800 bg-slate-900 " + className}>{children}</div>;
+export function Card({ children, className = "", ...rest }) {
+  return <div className={"rounded-xl border border-slate-800 bg-slate-900 " + className} {...rest}>{children}</div>;
 }
 
 export function Empty({ icon: Icon, title, hint }) {
