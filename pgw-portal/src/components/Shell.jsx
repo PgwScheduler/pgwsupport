@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   LogOut, LayoutDashboard, GraduationCap, Banknote, Clock, FileText,
-  ChevronRight, Eye, ShieldCheck, Building2, Users,
+  ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound,
 } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { LogoMark, T } from "./ui.jsx";
 import { StorePicker } from "./StorePicker.jsx";
+import { ChangePasswordModal } from "./ChangePasswordModal.jsx";
 
 const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -44,6 +45,7 @@ function scopeLabel(profile, storeCount) {
 
 export function Shell({ view, setView, children }) {
   const { profile, role, stores, currentStore, selectedStoreId, setSelectedStoreId, signOut } = useAuth();
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   return (
     <div className="pgw-root flex min-h-screen bg-slate-950 text-slate-100">
@@ -93,11 +95,20 @@ export function Shell({ view, setView, children }) {
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-white">
               {role === "master" ? <ShieldCheck className="h-4 w-4" style={{ color: T.accent }} /> : "PG"}
             </div>
+            <button
+              onClick={() => setShowChangePassword(true)}
+              className="text-slate-500 hover:text-slate-200"
+              title="Change password"
+            >
+              <KeyRound className="h-4 w-4" />
+            </button>
             <button onClick={signOut} className="text-slate-500 hover:text-slate-200" title="Sign out">
               <LogOut className="h-4 w-4" />
             </button>
           </div>
         </header>
+
+        {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
 
         {currentStore && (
           <div className="flex items-center gap-1.5 border-b border-slate-800 bg-slate-900 px-5 py-2 text-xs text-slate-500">

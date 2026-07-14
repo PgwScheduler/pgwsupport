@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { LogOut } from "lucide-react";
 import { useAuth } from "./context/AuthProvider.jsx";
 import { LoginScreen } from "./components/LoginScreen.jsx";
+import { SetPasswordScreen } from "./components/SetPasswordScreen.jsx";
 import { Shell } from "./components/Shell.jsx";
 import { Card, LogoMark } from "./components/ui.jsx";
 import { DashboardView } from "./components/DashboardView.jsx";
@@ -51,10 +52,11 @@ function PendingApprovalScreen({ onSignOut }) {
 }
 
 export default function App() {
-  const { loadingSession, loadingProfile, session, profile, currentStore, stores, signOut } = useAuth();
+  const { loadingSession, loadingProfile, session, profile, currentStore, stores, signOut, recoveryMode } = useAuth();
   const [view, setView] = useState("dashboard");
 
   if (loadingSession) return <LoadingScreen />;
+  if (recoveryMode) return <SetPasswordScreen />;
   if (!session) return <LoginScreen />;
   if (loadingProfile && !profile) return <LoadingScreen />;
   if (!profile?.role) return <PendingApprovalScreen onSignOut={signOut} />;

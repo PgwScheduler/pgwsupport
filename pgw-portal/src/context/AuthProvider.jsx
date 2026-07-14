@@ -23,6 +23,7 @@ export function AuthProvider({ children }) {
   const [selectedStoreId, setSelectedStoreId] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [authError, setAuthError] = useState(null);
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   const loadProfileAndStores = useCallback(async (userId) => {
     setLoadingProfile(true);
@@ -58,7 +59,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
       setSession(newSession);
       if (!newSession) {
         setProfile(null);
@@ -87,6 +89,20 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
   }, []);
 
+  const requestPasswordReset = useCallback(async (email) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    return { error };
+  }, []);
+
+  const updatePassword = useCallback(async (password) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    return { error };
+  }, []);
+
+  const clearRecoveryMode = useCallback(() => setRecoveryMode(false), []);
+
   const currentStore = useMemo(
     () => stores.find((s) => s.id === selectedStoreId) ?? null,
     [stores, selectedStoreId]
@@ -104,8 +120,12 @@ export function AuthProvider({ children }) {
     loadingSession: session === undefined,
     loadingProfile,
     authError,
+    recoveryMode,
     signIn,
     signOut,
+    requestPasswordReset,
+    updatePassword,
+    clearRecoveryMode,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
