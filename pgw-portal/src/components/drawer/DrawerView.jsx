@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Banknote, Check, Download, Eye, Trash2 } from "lucide-react";
+import { Banknote, Check, Download, Eye, FileSpreadsheet, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthProvider.jsx";
 import { useCashDrawer } from "../../hooks/useCashDrawer.js";
 import { blankEntry, computeTotals } from "../../lib/drawerMath.js";
@@ -8,15 +8,18 @@ import { money } from "../../lib/format.js";
 import { Card, Empty, Field, GhostBtn, PrimaryBtn, SectionHeader, T, inputCls } from "../ui.jsx";
 import { Calc, CountGrid, Entry, MiniTable } from "./shared.jsx";
 import { CloseoutDetail } from "./CloseoutDetail.jsx";
+import { ExportRangeModal } from "../ExportRangeModal.jsx";
 
 export function DrawerView({ store }) {
-  const { role } = useAuth();
+  const { role, stores } = useAuth();
   const { rows: saved, loading, error, saveCloseout, deleteCloseout } = useCashDrawer(store.id);
   const [d, setD] = useState(blankEntry);
   const [viewing, setViewing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [rangeOpen, setRangeOpen] = useState(false);
   const float = store.drawer_float;
   const canDelete = role === "master";
+  const canExportRange = (stores?.length ?? 0) > 1;
 
   const set = (k) => (v) => setD((p) => ({ ...p, [k]: v }));
   const setQty = (side) => (k, v) => setD((p) => ({ ...p, [side]: { ...p[side], [k]: v } }));
@@ -172,9 +175,14 @@ export function DrawerView({ store }) {
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="pgw-display text-sm font-bold uppercase tracking-wide text-slate-400">Saved closeouts</h3>
-          {saved.length > 0 && (
-            <GhostBtn onClick={() => exportSummaryCSV(saved, store)}><Download className="h-4 w-4" /> Export all to CSV</GhostBtn>
-          )}
+          <div className="flex items-center gap-2">
+            {canExportRange && (
+              <GhostBtn onClick={() => setRangeOpen(true)}><FileSpreadsheet className="h-4 w-4" /> Export range (Excel)</GhostBtn>
+            )}
+            {saved.length > 0 && (
+              <GhostBtn onClick={() => exportSummaryCSV(saved, store)}><Download className="h-4 w-4" /> Export all to CSV</GhostBtn>
+            )}
+          </div>
         </div>
         {loading ? (
           <p className="px-1 py-6 text-center text-sm text-slate-500">Loading…</p>
@@ -223,6 +231,7 @@ export function DrawerView({ store }) {
       </div>
 
       {viewing && <CloseoutDetail record={viewing} store={store} onClose={() => setViewing(null)} />}
+      {rangeOpen && <ExportRangeModal storeCount={stores.length} onClose={() => setRangeOpen(false)} />}
     </div>
   );
 }

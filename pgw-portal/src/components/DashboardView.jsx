@@ -1,10 +1,12 @@
-import React from "react";
-import { Banknote, Clock } from "lucide-react";
+import React, { useState } from "react";
+import { Banknote, Clock, FileSpreadsheet } from "lucide-react";
+import { useAuth } from "../context/AuthProvider.jsx";
 import { useDashboard } from "../hooks/useDashboard.js";
 import { computeTotals } from "../lib/drawerMath.js";
 import { money } from "../lib/format.js";
 import { thisWeekStart, weekLabel } from "../lib/weekUtils.js";
-import { Card, SectionHeader } from "./ui.jsx";
+import { Card, GhostBtn, SectionHeader } from "./ui.jsx";
+import { ExportRangeModal } from "./ExportRangeModal.jsx";
 
 function StatCard({ label, value, sub, tone }) {
   const toneCls = tone === "pos" ? "text-emerald-400" : tone === "neg" ? "text-red-400" : "text-white";
@@ -18,7 +20,10 @@ function StatCard({ label, value, sub, tone }) {
 }
 
 export function DashboardView({ store }) {
+  const { stores } = useAuth();
   const { latestDrawer, weekRows, docCount, loading, error } = useDashboard(store.id);
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const canExportRange = (stores?.length ?? 0) > 1;
 
   const totals = latestDrawer ? computeTotals(latestDrawer, store.drawer_float) : null;
   const wkHours = weekRows.reduce(
@@ -31,7 +36,17 @@ export function DashboardView({ store }) {
 
   return (
     <div className="space-y-4">
-      <SectionHeader title="Dashboard" subtitle={store.name} />
+      <SectionHeader
+        title="Dashboard"
+        subtitle={store.name}
+        action={
+          canExportRange && (
+            <GhostBtn onClick={() => setRangeOpen(true)}>
+              <FileSpreadsheet className="h-4 w-4" /> Export all stores' closeouts (Excel)
+            </GhostBtn>
+          )
+        }
+      />
 
       {error && (
         <p className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>
@@ -75,6 +90,8 @@ export function DashboardView({ store }) {
           </Card>
         </>
       )}
+
+      {rangeOpen && <ExportRangeModal storeCount={stores.length} onClose={() => setRangeOpen(false)} />}
     </div>
   );
 }
