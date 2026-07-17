@@ -1,73 +1,16 @@
 import { DENOMS } from "./denoms.js";
 import { computeTotals } from "./drawerMath.js";
 import { csvEsc, downloadFile } from "./csv.js";
+import { buildCloseoutRows } from "./closeoutRows.js";
 
 const m2 = (v) => (Number(v) || 0).toFixed(2);
 
-function closeoutRows(record, store) {
-  const e = record;
-  const t = computeTotals(record, store.drawer_float);
-  const R = [];
-  const line = (...cells) => R.push(cells);
-  line("PGW Cash Drawer Closeout");
-  line("Store", `#${store.store_number} ${store.name}`);
-  line("Date", record.business_date);
-  line("Entered by", record.submitted_by_name || "");
-  line("Saved at", record.created_at ? new Date(record.created_at).toLocaleString() : "");
-  line();
-  line("DRAWER CASH COUNT");
-  line("Currency", "Opening Qty", "Opening Amount", "Closing Qty", "Closing Amount");
-  DENOMS.forEach(([k, label, dn]) => {
-    const oq = Number(e.open_counts?.[k]) || 0, cq = Number(e.close_counts?.[k]) || 0;
-    line(label, oq, (oq * dn).toFixed(2), cq, (cq * dn).toFixed(2));
-  });
-  line("Total Cash", "", t.openTotal.toFixed(2), "", t.closeTotal.toFixed(2));
-  line();
-  line("CASH TO DEPOSIT");
-  line("Closing Cash Balance", t.closeTotal.toFixed(2));
-  line("Subtract Drawer Fund Amount", (-t.float).toFixed(2));
-  line("Net Daily Cash Activity", t.netDailyCash.toFixed(2));
-  line("Total Cash to Deposit", t.cashToDeposit.toFixed(2));
-  line();
-  line("DAILY SALES SUMMARY");
-  line("CASH", m2(e.cash));
-  line("TOTAL Customer CHECKS", m2(e.checks));
-  line("CASH, CHECKS TOTAL", t.cashChecksTotal.toFixed(2));
-  line("Midas CC Totals (Bread)", m2(e.bread));
-  line("Sync Car Care Totals (Synchrony)", m2(e.synchrony));
-  line("Visa, Disc, Amex, Debit, MC", m2(e.cards));
-  line("American First Totals", m2(e.american_first));
-  line("Koalifi Totals", m2(e.koalifi));
-  line("Snap Totals", m2(e.snap));
-  line("Advance Pay", m2(e.advance_pay));
-  line("Prior Advance Pay", m2(e.prior_advance));
-  line("Advance Minus Prior Advanced", t.advanceMinusPrior.toFixed(2));
-  line("Cash Overage", t.overage.toFixed(2), e.overage_why || "");
-  line("Cash Shortage", t.shortage.toFixed(2), e.shortage_why || "");
-  line("Charges / Fleet invoices", t.fleetTotal.toFixed(2));
-  line("POA's (Visa, Disc, Amex, Debit)", t.poaCardsTotal.toFixed(2));
-  line("SALES TAX", m2(e.sales_tax));
-  line("TOTAL SALES", t.totalSales.toFixed(2));
-  line("TOTAL for Home Office", t.homeOffice.toFixed(2));
-  line("Credit Cards minus Credit Card POAs", t.cardsMinusPOA.toFixed(2));
-  line("Store Deposit to Bank", t.storeDeposit.toFixed(2));
-  line();
-  const tbl = (title, cols, rows, total) => {
-    line(title);
-    line(...cols.map((c) => c.label));
-    (rows || []).forEach((r) => line(...cols.map((c) => (c.money ? m2(r[c.key]) : r[c.key] ?? ""))));
-    line("Total", ...cols.slice(1).map((c, i) => (i === cols.length - 2 ? total.toFixed(2) : "")));
-    line();
-  };
-  tbl("POA - CREDIT CARDS", [{ key: "customer", label: "Customer" }, { key: "invoice", label: "Invoice" }, { key: "amount", label: "Amount", money: true }], e.poa_cards, t.poaCardsTotal);
-  tbl("POA - CHECKS OR CASH & VENDOR REBATES", [{ key: "invoice", label: "Invoice #" }, { key: "account", label: "Account or Vendor" }, { key: "amount", label: "Amount", money: true }], e.poa_checks, t.poaChecksTotal);
-  tbl("FLEET / CHARGE INVOICES", [{ key: "invoice", label: "Invoice #" }, { key: "account", label: "Account" }, { key: "amount", label: "Amount", money: true }, { key: "auth", label: "Auth #" }], e.fleet, t.fleetTotal);
-  tbl("CASH PAYOUTS RECAP", [{ key: "vendor", label: "Vendor" }, { key: "ro", label: "RO/PO #" }, { key: "description", label: "Description" }, { key: "amount", label: "Amount", money: true }], e.payouts, t.pettyTotal);
-  return R;
-}
-
+/* Single-store deposit sheet -> CSV. Uses the shared row model so it stays
+   byte-for-byte in step with the per-store sheets in the multi-store workbook. */
 export function exportCloseoutCSV(record, store) {
-  const csv = closeoutRows(record, store).map((r) => (r || []).map(csvEsc).join(",")).join("\n");
+  const csv = buildCloseoutRows(record, store)
+    .map((r) => r.cells.map(csvEsc).join(","))
+    .join("\n");
   downloadFile(`PGW_${store.store_number}_closeout_${record.business_date}.csv`, csv, "text/csv;charset=utf-8;");
 }
 

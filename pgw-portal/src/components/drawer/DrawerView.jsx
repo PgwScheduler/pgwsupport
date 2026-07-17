@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { Banknote, Check, Download, Eye, Trash2 } from "lucide-react";
+import { Banknote, Check, Download, Eye, FileSpreadsheet, Trash2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthProvider.jsx";
 import { useCashDrawer } from "../../hooks/useCashDrawer.js";
+import { useCloseoutRangeExport } from "../../hooks/useCloseoutRangeExport.js";
 import { blankEntry, computeTotals } from "../../lib/drawerMath.js";
 import { exportSummaryCSV } from "../../lib/drawerExport.js";
 import { money } from "../../lib/format.js";
@@ -10,13 +11,15 @@ import { Calc, CountGrid, Entry, MiniTable } from "./shared.jsx";
 import { CloseoutDetail } from "./CloseoutDetail.jsx";
 
 export function DrawerView({ store }) {
-  const { role } = useAuth();
+  const { role, stores } = useAuth();
   const { rows: saved, loading, error, saveCloseout, deleteCloseout } = useCashDrawer(store.id);
   const [d, setD] = useState(blankEntry);
   const [viewing, setViewing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [rangeOpen, setRangeOpen] = useState(false);
   const float = store.drawer_float;
   const canDelete = role === "master";
+  const canExportRange = (stores?.length ?? 0) > 1;
 
   const set = (k) => (v) => setD((p) => ({ ...p, [k]: v }));
   const setQty = (side) => (k, v) => setD((p) => ({ ...p, [side]: { ...p[side], [k]: v } }));
@@ -172,9 +175,14 @@ export function DrawerView({ store }) {
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="pgw-display text-sm font-bold uppercase tracking-wide text-slate-400">Saved closeouts</h3>
-          {saved.length > 0 && (
-            <GhostBtn onClick={() => exportSummaryCSV(saved, store)}><Download className="h-4 w-4" /> Export all to CSV</GhostBtn>
-          )}
+          <div className="flex items-center gap-2">
+            {canExportRange && (
+              <GhostBtn onClick={() => setRangeOpen(true)}><FileSpreadsheet className="h-4 w-4" /> Export range (Excel)</GhostBtn>
+            )}
+            {saved.length > 0 && (
+              <GhostBtn onClick={() => exportSummaryCSV(saved, store)}><Download className="h-4 w-4" /> Export all to CSV</GhostBtn>
+            )}
+          </div>
         </div>
         {loading ? (
           <p className="px-1 py-6 text-center text-sm text-slate-500">Loading…</p>
@@ -223,6 +231,57 @@ export function DrawerView({ store }) {
       </div>
 
       {viewing && <CloseoutDetail record={viewing} store={store} onClose={() => setViewing(null)} />}
+      {rangeOpen && <ExportRangeModal storeCount={stores.length} onClose={() => setRangeOpen(false)} />}
+    </div>
+  );
+}
+
+/* Date-range picker -> multi-store .xlsx workbook. Scope is whatever the
+   signed-in user can see (RLS), so the office/DMs/admins get every store their
+   role covers in one file. A single date is just From === To. */
+function ExportRangeModal({ storeCount, onClose }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
+  const [done, setDone] = useState(null);
+  const { exportRange, exporting, error } = useCloseoutRangeExport();
+
+  const run = async () => {
+    setDone(null);
+    const { count } = await exportRange({ startDate, endDate });
+    if (count > 0) setDone(count);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4" onClick={onClose}>
+      <div className="mt-16 w-full max-w-md" onClick={(ev) => ev.stopPropagation()}>
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-3">
+            <div>
+              <h3 className="pgw-display text-base font-bold text-white">Export closeouts (Excel)</h3>
+              <p className="text-xs text-slate-500">One workbook — a Summary sheet plus one sheet per store · {storeCount} stores in view</p>
+            </div>
+            <button onClick={onClose} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="space-y-4 p-5">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="From"><input type="date" className={inputCls} value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
+              <Field label="To"><input type="date" className={inputCls} value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
+            </div>
+            <p className="text-[11px] text-slate-500">Pick the same day in both boxes for a single date. You'll only see the stores your access covers.</p>
+            {error && <p className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>}
+            {done && <p className="rounded-md border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-400">Exported {done} closeout{done === 1 ? "" : "s"}. Check your downloads.</p>}
+            <div className="flex justify-end gap-2">
+              <GhostBtn onClick={onClose}>Close</GhostBtn>
+              <PrimaryBtn onClick={run} disabled={exporting}>
+                <FileSpreadsheet className="h-4 w-4" /> {exporting ? "Building…" : "Export workbook"}
+              </PrimaryBtn>
+            </div>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
