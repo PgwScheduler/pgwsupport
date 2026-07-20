@@ -11,6 +11,21 @@ import { computeTotals } from "./drawerMath.js";
 const GOLD = "FFF5A623"; // matches T.accent (#F5A623)
 const HDR = "FFEDEDED";
 
+// Thin gridline drawn around every populated cell so the sheet prints cleanly.
+const THIN = { style: "thin", color: { argb: "FFBFBFBF" } };
+const BOX = { top: THIN, left: THIN, bottom: THIN, right: THIN };
+const applyBorders = (row, from, to) => {
+  for (let c = from; c <= to; c++) row.getCell(c).border = BOX;
+};
+// 1-based index of the last non-empty cell in a padded row (0 = all empty).
+const lastFilledCol = (cells) => {
+  let last = 0;
+  cells.forEach((v, i) => {
+    if (v !== "" && v !== null && v !== undefined) last = i + 1;
+  });
+  return last;
+};
+
 const fmtDate = (iso) => {
   if (!iso) return "";
   const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
@@ -54,44 +69,102 @@ function renderCloseoutSheet(ws, c) {
     } else if (r.style === "total") {
       row.eachCell((cell) => (cell.font = { bold: true }));
     }
+    if (r.style !== "blank") {
+      const merged = r.style === "title" || r.style === "sectionTitle";
+      applyBorders(row, 1, merged ? 5 : Math.max(1, lastFilledCol(r.cells)));
+    }
   }
+}
+
+// Summary sheet columns, in display order. `money` cells get the currency
+// number format; `total` cells are summed into the grand-total row. Each value
+// maps to a closeout field (see rowValuesFor) so the layout stays data-driven.
+const SUMMARY_COLS = [
+  { key: "storeNumber",   label: "Store #", width: 10 },
+  { key: "storeName",     label: "Store Name", width: 28 },
+  { key: "date",          label: "Date", width: 12 },
+  { key: "cashToDeposit", label: "Total Cash to Deposit", money: true, total: true, width: 20 },
+  { key: "totalSales",    label: "Total Sales", money: true, total: true, width: 16 },
+  { key: "homeOffice",    label: "Total for Home Office", money: true, total: true, width: 20 },
+  { key: "storeDeposit",  label: "Store Deposit to Bank", money: true, total: true, width: 20 },
+  { key: "checks",        label: "Total Customer Checks", money: true, total: true, width: 20 },
+  { key: "cards",         label: "Visa, Disc, Amex, Debit, MC", money: true, total: true, width: 24 },
+  { key: "bread",         label: "Midas CC Totals (Bread)", money: true, total: true, width: 22 },
+  { key: "americanFirst", label: "American First Totals", money: true, total: true, width: 20 },
+  { key: "koalifi",       label: "Koalifi Totals", money: true, total: true, width: 16 },
+  { key: "snap",          label: "Snap Totals", money: true, total: true, width: 14 },
+  { key: "fleet",         label: "Charges / Fleet Invoices", money: true, total: true, width: 22 },
+  { key: "overShort",     label: "Cash Over / Short", money: true, total: false, width: 18 },
+];
+
+// One closeout -> the value for each Summary column. The typed-in fields
+// (checks/cards/bread/american_first/koalifi/snap) come straight off the row;
+// fleet is the summed Charges/Fleet line items via computeTotals().fleetTotal.
+function rowValuesFor(c) {
+  const t = computeTotals(c, c.store.drawer_float);
+  const n = (v) => round2(Number(v) || 0);
+  return {
+    storeNumber: c.store.store_number,
+    storeName: c.store.name,
+    date: fmtDate(c.business_date),
+    cashToDeposit: round2(t.cashToDeposit),
+    totalSales: round2(t.totalSales),
+    homeOffice: round2(t.homeOffice),
+    storeDeposit: round2(t.storeDeposit),
+    checks: n(c.checks),
+    cards: n(c.cards),
+    bread: n(c.bread),
+    americanFirst: n(c.american_first),
+    koalifi: n(c.koalifi),
+    snap: n(c.snap),
+    fleet: round2(t.fleetTotal),
+    overShort: round2(t.diff),
+  };
 }
 
 function buildSummarySheet(ws, closeouts, { startDate, endDate, accessibleStores }) {
   const single = startDate === endDate;
-  ws.mergeCells("A1:H1");
+  const nCols = SUMMARY_COLS.length;
+
+  ws.mergeCells(1, 1, 1, nCols);
   ws.getCell("A1").value = single
     ? `PGW Cash Drawer Closeouts — ${fmtDate(startDate)}`
     : `PGW Cash Drawer Closeouts — ${fmtDate(startDate)} to ${fmtDate(endDate)}`;
   ws.getCell("A1").font = { bold: true, size: 14 };
 
-  const cols = ["Store #", "Store Name", "Date", "Total Cash to Deposit", "Total Sales",
-    "Total for Home Office", "Store Deposit to Bank", "Cash Over / Short"];
-  const hRow = ws.addRow(cols);
+  const hRow = ws.addRow(SUMMARY_COLS.map((c) => c.label));
   hRow.font = { bold: true };
   hRow.eachCell((cell) => (cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GOLD } }));
+  applyBorders(hRow, 1, nCols);
 
   const sorted = [...closeouts].sort(
     (a, b) => a.store.store_number.localeCompare(b.store.store_number) ||
       a.business_date.localeCompare(b.business_date));
 
-  const totals = [0, 0, 0, 0];
-  for (const c of sorted) {
-    const t = computeTotals(c, c.store.drawer_float);
-    const vals = [round2(t.cashToDeposit), round2(t.totalSales), round2(t.homeOffice), round2(t.storeDeposit)];
-    vals.forEach((v, i) => (totals[i] = round2(totals[i] + v)));
-    ws.addRow([c.store.store_number, c.store.name, fmtDate(c.business_date), ...vals, round2(t.diff)]);
-  }
-  const tRow = ws.addRow(["", "TOTAL", "", ...totals, ""]);
-  tRow.font = { bold: true };
+  const totals = {};
+  SUMMARY_COLS.forEach((c) => { if (c.total) totals[c.key] = 0; });
 
-  ["D", "E", "F", "G", "H"].forEach((col) => {
-    ws.getColumn(col).numFmt = "#,##0.00";
-    ws.getColumn(col).width = 20;
+  for (const c of sorted) {
+    const v = rowValuesFor(c);
+    SUMMARY_COLS.forEach((col) => {
+      if (col.total) totals[col.key] = round2(totals[col.key] + v[col.key]);
+    });
+    const row = ws.addRow(SUMMARY_COLS.map((col) => v[col.key]));
+    applyBorders(row, 1, nCols);
+  }
+
+  const tRow = ws.addRow(SUMMARY_COLS.map((col, i) => {
+    if (i === 1) return "TOTAL";
+    return col.total ? totals[col.key] : "";
+  }));
+  tRow.font = { bold: true };
+  applyBorders(tRow, 1, nCols);
+
+  SUMMARY_COLS.forEach((col, i) => {
+    const column = ws.getColumn(i + 1);
+    column.width = col.width;
+    if (col.money) column.numFmt = "#,##0.00";
   });
-  ws.getColumn("A").width = 10;
-  ws.getColumn("B").width = 28;
-  ws.getColumn("C").width = 12;
   ws.views = [{ state: "frozen", ySplit: 2 }];
 
   // Stores the user can access but that have no closeout in the chosen range.
@@ -101,7 +174,10 @@ function buildSummarySheet(ws, closeouts, { startDate, endDate, accessibleStores
     ws.addRow([]);
     const mHead = ws.addRow(["Stores with no closeout in range"]);
     mHead.getCell(1).font = { bold: true, color: { argb: "FFB00020" } };
-    for (const s of missing) ws.addRow([s.storeNumber, s.storeName]);
+    for (const s of missing) {
+      const row = ws.addRow([s.storeNumber, s.storeName]);
+      applyBorders(row, 1, 2);
+    }
   }
 }
 

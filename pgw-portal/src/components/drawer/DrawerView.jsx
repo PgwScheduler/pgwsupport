@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { Banknote, Check, Download, Eye, FileSpreadsheet, Trash2 } from "lucide-react";
+import { Banknote, Check, Download, Eye, FileSpreadsheet, Pencil, Trash2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthProvider.jsx";
 import { useCashDrawer } from "../../hooks/useCashDrawer.js";
-import { blankEntry, computeTotals } from "../../lib/drawerMath.js";
+import { blankEntry, computeTotals, entryFromRecord } from "../../lib/drawerMath.js";
 import { exportSummaryCSV } from "../../lib/drawerExport.js";
 import { money } from "../../lib/format.js";
 import { Card, Empty, Field, GhostBtn, PrimaryBtn, SectionHeader, T, inputCls } from "../ui.jsx";
@@ -12,8 +12,9 @@ import { ExportRangeModal } from "../ExportRangeModal.jsx";
 
 export function DrawerView({ store }) {
   const { role, stores } = useAuth();
-  const { rows: saved, loading, error, saveCloseout, deleteCloseout } = useCashDrawer(store.id);
+  const { rows: saved, loading, error, saveCloseout, updateCloseout, deleteCloseout } = useCashDrawer(store.id);
   const [d, setD] = useState(blankEntry);
+  const [editingId, setEditingId] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [rangeOpen, setRangeOpen] = useState(false);
@@ -33,10 +34,27 @@ export function DrawerView({ store }) {
   const save = async () => {
     if (!d.business_date || saving) return;
     setSaving(true);
-    const { error } = await saveCloseout(d);
+    const { error } = editingId ? await updateCloseout(editingId, d) : await saveCloseout(d);
     setSaving(false);
-    if (!error) setD(blankEntry());
+    if (!error) {
+      setD(blankEntry());
+      setEditingId(null);
+    }
   };
+
+  const startEdit = (record) => {
+    setViewing(null);
+    setEditingId(record.id);
+    setD(entryFromRecord(record));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const cancelEdit = () => {
+    setD(blankEntry());
+    setEditingId(null);
+  };
+
+  const editing = saved.find((r) => r.id === editingId) || null;
 
   return (
     <div className="space-y-5">
@@ -45,9 +63,13 @@ export function DrawerView({ store }) {
         subtitle={`#${store.store_number} · ${store.name}`}
         action={
           <div className="flex items-center gap-2">
+            {editingId && (
+              <GhostBtn onClick={cancelEdit}><X className="h-4 w-4" /> Cancel edit</GhostBtn>
+            )}
             <input type="date" className={inputCls + " w-auto"} value={d.business_date} onChange={(e) => set("business_date")(e.target.value)} />
             <PrimaryBtn onClick={save} disabled={saving}>
-              <Check className="h-4 w-4" /> {saving ? "Saving…" : "Save closeout"}
+              <Check className="h-4 w-4" />
+              {saving ? "Saving…" : editingId ? "Update closeout" : "Save closeout"}
             </PrimaryBtn>
           </div>
         }
@@ -55,6 +77,16 @@ export function DrawerView({ store }) {
 
       {error && (
         <p className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>
+      )}
+
+      {editingId && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-700/60 bg-amber-950/30 px-4 py-2.5 text-sm text-amber-300">
+          <span className="flex items-center gap-2">
+            <Pencil className="h-4 w-4" />
+            Editing the closeout saved for <strong>{editing?.business_date || d.business_date}</strong>. Saving updates that record — it won't create a new one.
+          </span>
+          <button onClick={cancelEdit} className="text-xs font-medium text-amber-200 underline-offset-2 hover:underline">Cancel</button>
+        </div>
       )}
 
       <div className="flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm"
@@ -210,9 +242,17 @@ export function DrawerView({ store }) {
                       <td className="px-4 py-2.5 text-slate-400">{money(rt.pettyTotal)}</td>
                       <td className="px-4 py-2.5 text-slate-400">{money(rt.homeOffice)}</td>
                       <td className="px-4 py-2.5 text-right">
-                        <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: T.accentSoftText }}>
-                          <Eye className="h-3.5 w-3.5" /> View sheet
-                        </span>
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            onClick={(ev) => { ev.stopPropagation(); startEdit(r); }}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-white"
+                          >
+                            <Pencil className="h-3.5 w-3.5" /> Edit
+                          </button>
+                          <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: T.accentSoftText }}>
+                            <Eye className="h-3.5 w-3.5" /> View sheet
+                          </span>
+                        </div>
                       </td>
                       {canDelete && (
                         <td className="px-4 py-2.5 text-right">
@@ -230,7 +270,7 @@ export function DrawerView({ store }) {
         )}
       </div>
 
-      {viewing && <CloseoutDetail record={viewing} store={store} onClose={() => setViewing(null)} />}
+      {viewing && <CloseoutDetail record={viewing} store={store} onClose={() => setViewing(null)} onEdit={() => startEdit(viewing)} />}
       {rangeOpen && <ExportRangeModal storeCount={stores.length} onClose={() => setRangeOpen(false)} />}
     </div>
   );
