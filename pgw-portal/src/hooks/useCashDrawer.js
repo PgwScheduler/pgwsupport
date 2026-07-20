@@ -53,6 +53,36 @@ export function useCashDrawer(locationId) {
     [locationId, user?.id, profile?.full_name]
   );
 
+  const updateCloseout = useCallback(
+    async (id, entry) => {
+      // Only the typed-in fields change; location_id and submitted_by (who
+      // originally entered it) are left as-is. RLS (cash_drawer_update, scoped
+      // by can_access_location) already limits this to stores the user can see.
+      const payload = sanitizeEntryForSave(entry);
+      const { data, error } = await supabase
+        .from("cash_drawer_closeouts")
+        .update(payload)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) {
+        setError(error.message);
+        return { error };
+      }
+      setRows((prev) =>
+        prev
+          .map((r) => (r.id === id ? { ...data, submitted_by_name: r.submitted_by_name } : r))
+          .sort(
+            (a, b) =>
+              b.business_date.localeCompare(a.business_date) ||
+              String(b.created_at).localeCompare(String(a.created_at))
+          )
+      );
+      return { data };
+    },
+    []
+  );
+
   const deleteCloseout = useCallback(
     async (id) => {
       const prevRows = rows;
@@ -66,5 +96,5 @@ export function useCashDrawer(locationId) {
     [rows]
   );
 
-  return { rows, loading, error, saveCloseout, deleteCloseout, refetch: fetchRows };
+  return { rows, loading, error, saveCloseout, updateCloseout, deleteCloseout, refetch: fetchRows };
 }

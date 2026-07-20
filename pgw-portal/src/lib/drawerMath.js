@@ -15,6 +15,33 @@ export function blankEntry() {
   };
 }
 
+/* Loads a saved cash_drawer_closeouts row back into the editable form shape.
+   The inverse of sanitizeEntryForSave: money defaults of 0 become "" so the
+   placeholders show, and each jsonb line item gets a stable `id` for the
+   table's React keys / row editing. Empty tables get one blank row to type in. */
+export function entryFromRecord(record) {
+  const s = (v) => (v == null ? "" : String(v));
+  const money = (v) => (num(v) === 0 ? "" : num(v));
+  const withIds = (rows, shape) => {
+    const out = (rows || []).map((r, i) => ({ ...shape, ...r, id: r.id ?? Date.now() + i }));
+    return out.length ? out : [{ ...shape, id: Date.now() }];
+  };
+  return {
+    business_date: String(record.business_date || "").slice(0, 10),
+    open_counts: { ...(record.open_counts || {}) },
+    close_counts: { ...(record.close_counts || {}) },
+    cash: money(record.cash), checks: money(record.checks), bread: money(record.bread),
+    synchrony: money(record.synchrony), cards: money(record.cards), american_first: money(record.american_first),
+    koalifi: money(record.koalifi), snap: money(record.snap), advance_pay: money(record.advance_pay),
+    prior_advance: money(record.prior_advance), sales_tax: money(record.sales_tax),
+    overage_why: s(record.overage_why), shortage_why: s(record.shortage_why),
+    poa_cards: withIds(record.poa_cards, { customer: "", invoice: "", amount: "" }),
+    poa_checks: withIds(record.poa_checks, { invoice: "", account: "", amount: "" }),
+    fleet: withIds(record.fleet, { invoice: "", account: "", amount: "", auth: "" }),
+    payouts: withIds(record.payouts, { vendor: "", ro: "", description: "", amount: "" }),
+  };
+}
+
 /* Mirrors the original deposit-sheet formulas exactly — see CLAUDE.md. */
 export function computeTotals(entry, float) {
   const openTotal = countTotal(entry.open_counts);

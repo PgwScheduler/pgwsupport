@@ -1,12 +1,12 @@
 import React from "react";
-import { Download, Printer, X } from "lucide-react";
+import { Download, Pencil, Printer, X } from "lucide-react";
 import { Card, GhostBtn, T } from "../ui.jsx";
 import { money } from "../../lib/format.js";
 import { computeTotals } from "../../lib/drawerMath.js";
 import { exportCloseoutCSV, printCloseout } from "../../lib/drawerExport.js";
 import { CountRecap, DetailRow, RecapTable } from "./shared.jsx";
 
-export function CloseoutDetail({ record, store, onClose }) {
+export function CloseoutDetail({ record, store, onClose, onEdit }) {
   const e = record;
   const t = computeTotals(record, store.drawer_float);
 
@@ -24,6 +24,9 @@ export function CloseoutDetail({ record, store, onClose }) {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {onEdit && (
+                <GhostBtn onClick={onEdit}><Pencil className="h-4 w-4" /> Edit</GhostBtn>
+              )}
               <GhostBtn onClick={() => exportCloseoutCSV(record, store)}><Download className="h-4 w-4" /> CSV</GhostBtn>
               <GhostBtn onClick={() => printCloseout(record, store)}><Printer className="h-4 w-4" /> Print / PDF</GhostBtn>
               <button onClick={onClose} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
