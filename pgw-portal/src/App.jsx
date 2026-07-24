@@ -15,7 +15,7 @@ import { UsersView } from "./components/users/UsersView.jsx";
 
 function FullScreenMessage({ children }) {
   return (
-    <div className="pgw-root flex min-h-screen items-center justify-center bg-slate-950 p-6 text-slate-100">
+    <div className="pgw-root flex min-h-screen items-center justify-center bg-surface-page p-6 text-content-primary">
       <div className="w-full max-w-sm text-center">{children}</div>
     </div>
   );
@@ -26,7 +26,7 @@ function LoadingScreen() {
     <FullScreenMessage>
       <div className="flex flex-col items-center gap-3">
         <LogoMark size="lg" />
-        <p className="text-sm text-slate-400">Loading…</p>
+        <p className="text-sm text-content-secondary">Loading…</p>
       </div>
     </FullScreenMessage>
   );
@@ -39,12 +39,12 @@ function PendingApprovalScreen({ onSignOut }) {
         <div className="mb-4 flex justify-center">
           <LogoMark />
         </div>
-        <h1 className="pgw-display mb-2 text-lg font-bold text-white">Account pending approval</h1>
-        <p className="mb-4 text-sm text-slate-400">
+        <h1 className="pgw-display mb-2 text-lg font-bold text-content-primary">Account pending approval</h1>
+        <p className="mb-4 text-sm text-content-secondary">
           You're signed in, but a master administrator hasn't assigned your role or store yet. Check back once
           they've set up your access.
         </p>
-        <button onClick={onSignOut} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-200">
+        <button onClick={onSignOut} className="inline-flex items-center gap-1.5 text-sm text-content-muted hover:text-content-primary">
           <LogOut className="h-4 w-4" /> Sign out
         </button>
       </Card>
@@ -65,11 +65,11 @@ export default function App() {
     return (
       <FullScreenMessage>
         <Card className="p-6">
-          <h1 className="pgw-display mb-2 text-lg font-bold text-white">No stores visible</h1>
-          <p className="mb-4 text-sm text-slate-400">
+          <h1 className="pgw-display mb-2 text-lg font-bold text-content-primary">No stores visible</h1>
+          <p className="mb-4 text-sm text-content-secondary">
             Your account is approved, but no stores are assigned to your scope yet. Contact a master administrator.
           </p>
-          <button onClick={signOut} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-200">
+          <button onClick={signOut} className="inline-flex items-center gap-1.5 text-sm text-content-muted hover:text-content-primary">
             <LogOut className="h-4 w-4" /> Sign out
           </button>
         </Card>

@@ -21,15 +21,15 @@ export function ExportRangeModal({ storeCount, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-scrim p-4" onClick={onClose}>
       <div className="mt-16 w-full max-w-md" onClick={(ev) => ev.stopPropagation()}>
         <Card className="overflow-hidden">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-3">
+          <div className="flex items-center justify-between gap-3 border-b border-hairline px-5 py-3">
             <div>
-              <h3 className="pgw-display text-base font-bold text-white">Export closeouts (Excel)</h3>
-              <p className="text-xs text-slate-500">One workbook — a Summary sheet plus one sheet per store · {storeCount} stores in view</p>
+              <h3 className="pgw-display text-base font-bold text-content-primary">Export closeouts (Excel)</h3>
+              <p className="text-xs text-content-muted">One workbook — a Summary sheet plus one sheet per store · {storeCount} stores in view</p>
             </div>
-            <button onClick={onClose} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
+            <button onClick={onClose} className="rounded-md p-1.5 text-content-secondary hover:bg-surface-overlay hover:text-content-primary">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -38,9 +38,9 @@ export function ExportRangeModal({ storeCount, onClose }) {
               <Field label="From"><input type="date" className={inputCls} value={startDate} max={endDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
               <Field label="To"><input type="date" className={inputCls} value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
             </div>
-            <p className="text-[11px] text-slate-500">Pick the same day in both boxes for a single date. You'll only see the stores your access covers.</p>
-            {error && <p className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>}
-            {done && <p className="rounded-md border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-400">Exported {done} closeout{done === 1 ? "" : "s"}. Check your downloads.</p>}
+            <p className="text-[11px] text-content-muted">Pick the same day in both boxes for a single date. You'll only see the stores your access covers.</p>
+            {error && <p className="rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>}
+            {done && <p className="rounded-md border border-success-border bg-success-tint px-3 py-2 text-sm text-success">Exported {done} closeout{done === 1 ? "" : "s"}. Check your downloads.</p>}
             <div className="flex justify-end gap-2">
               <GhostBtn onClick={onClose}>Close</GhostBtn>
               <PrimaryBtn onClick={run} disabled={exporting}>

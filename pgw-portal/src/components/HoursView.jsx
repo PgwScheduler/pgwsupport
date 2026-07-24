@@ -27,9 +27,9 @@ const RATE_FIELDS = ["hourly_rate", "flat_rate_per_hour", "manager_salary"];
 const PAY_FIELDS = ["bonus", "incentives"];
 
 const cell =
-  "w-16 rounded border border-slate-700 bg-slate-800 px-1 py-1 text-right text-sm text-slate-100 outline-none focus:border-slate-500";
-const roCell = "w-16 px-1 py-1 text-right text-sm text-slate-400";
-const compCell = "px-2 py-1 text-right text-sm font-semibold text-white whitespace-nowrap";
+  "w-16 rounded border border-hairline-strong bg-surface-overlay px-1 py-1 text-right text-sm text-content-primary outline-none focus:border-hairline-strong";
+const roCell = "w-16 px-1 py-1 text-right text-sm text-content-secondary";
+const compCell = "px-2 py-1 text-right text-sm font-semibold text-content-primary whitespace-nowrap";
 
 function Th({ children, className = "" }) {
   return <th className={"px-2 py-2 text-right font-medium whitespace-nowrap " + className}>{children}</th>;
@@ -131,7 +131,7 @@ function MidasHoursView({ store }) {
               <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, -1))}>
                 <ChevronLeft className="h-4 w-4" />
               </GhostBtn>
-              <div className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200">
+              <div className="rounded-md border border-hairline-strong bg-surface-overlay px-3 py-2 text-sm font-medium text-content-primary">
                 Week of {weekLabel(week)}
               </div>
               <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, 1))}>
@@ -149,7 +149,7 @@ function MidasHoursView({ store }) {
       />
 
       {error && (
-        <p className="mb-3 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>
+        <p className="mb-3 rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>
       )}
 
       {/* Payroll % summary */}
@@ -160,15 +160,15 @@ function MidasHoursView({ store }) {
         <SummaryStat label="VST % (techs)" value={pct(vstPct)} target={TARGETS.vst} ratio={vstPct} />
       </div>
       {privileged && summary && (
-        <p className="mb-3 text-xs text-slate-500">
-          Payroll dollars: <span className="font-semibold text-slate-300">{money(summary.payrollDollars || 0)}</span>{" "}
+        <p className="mb-3 text-xs text-content-muted">
+          Payroll dollars: <span className="font-semibold text-content-secondary">{money(summary.payrollDollars || 0)}</span>{" "}
           — visible to office roles only.
         </p>
       )}
 
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-slate-800/60 text-left text-xs uppercase tracking-wide text-slate-400">
+          <thead className="bg-surface-overlay text-left text-xs uppercase tracking-wide text-content-secondary">
             <tr>
               <Th className="text-left">Position</Th>
               <Th className="text-left">Employee</Th>
@@ -188,7 +188,7 @@ function MidasHoursView({ store }) {
               <Th>FLAT</Th>
               {privileged && (
                 <>
-                  <Th className="border-l border-slate-700">Rate / Sal</Th>
+                  <Th className="border-l border-hairline-strong">Rate / Sal</Th>
                   <Th>Flat Rate</Th>
                   <Th>Hrly Earn</Th>
                   <Th>OT</Th>
@@ -202,17 +202,17 @@ function MidasHoursView({ store }) {
               <Th></Th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className="divide-y divide-hairline">
             {merged.map((r) => {
               const empId = r.employee.id;
               const sc = computeStoreRow(r.mEntry);
               const pc = privileged ? computePayRow(r.mEntry, r.mRate, r.mPay) : null;
               const isManager = r.employee.position === "manager";
               return (
-                <tr key={empId}>
+                <tr key={empId} className="odd:bg-surface-stripe hover:bg-surface-overlay">
                   <td className="px-2 py-1.5">
                     <select
-                      className="rounded border border-transparent bg-transparent py-1 text-sm text-slate-200 outline-none focus:border-slate-600 focus:bg-slate-800"
+                      className="rounded border border-transparent bg-transparent py-1 text-sm text-content-primary outline-none focus:border-hairline-strong focus:bg-surface-overlay"
                       value={r.employee.position}
                       onChange={(e) => updateEmployee(empId, { position: e.target.value })}
                     >
@@ -223,7 +223,7 @@ function MidasHoursView({ store }) {
                   </td>
                   <td className="px-2 py-1.5">
                     <input
-                      className="w-36 rounded border border-transparent bg-transparent px-1 py-1 text-sm font-medium text-white outline-none focus:border-slate-600 focus:bg-slate-800"
+                      className="w-36 rounded border border-transparent bg-transparent px-1 py-1 text-sm font-medium text-content-primary outline-none focus:border-hairline-strong focus:bg-surface-overlay"
                       value={val(empId, "full_name", r.employee.full_name)}
                       onChange={(e) => {
                         setLocal(empId, "full_name", e.target.value);
@@ -265,7 +265,7 @@ function MidasHoursView({ store }) {
                   {privileged && (
                     <>
                       {/* Rate / Salary */}
-                      <td className="border-l border-slate-700 px-1 py-1.5 text-right">
+                      <td className="border-l border-hairline-strong px-1 py-1.5 text-right">
                         {isManager ? (
                           <NumCell inline field="manager_salary" empId={empId} val={val} commit={commit} server={r.mRate.manager_salary} placeholder="salary" />
                         ) : (
@@ -273,7 +273,7 @@ function MidasHoursView({ store }) {
                         )}
                       </td>
                       <td className="px-1 py-1.5 text-right">
-                        {isManager ? <span className="text-slate-600">x</span> : (
+                        {isManager ? <span className="text-content-muted">x</span> : (
                           <NumCell inline field="flat_rate_per_hour" empId={empId} val={val} commit={commit} server={r.mRate.flat_rate_per_hour} />
                         )}
                       </td>
@@ -288,7 +288,7 @@ function MidasHoursView({ store }) {
                   )}
 
                   <td className="px-2 py-1.5 text-right">
-                    <button onClick={() => setPendingRemove({ id: empId, name: r.employee.full_name })} className="text-slate-600 hover:text-red-400" title="Remove employee">
+                    <button onClick={() => setPendingRemove({ id: empId, name: r.employee.full_name })} className="text-content-muted hover:text-danger" title="Remove employee">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -297,14 +297,14 @@ function MidasHoursView({ store }) {
             })}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={privileged ? 26 : 17} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={privileged ? 26 : 17} className="px-4 py-10 text-center text-sm text-content-muted">
                   No employees on the roster yet. Add one below to start the week.
                 </td>
               </tr>
             )}
             {loading && (
               <tr>
-                <td colSpan={privileged ? 26 : 17} className="px-4 py-10 text-center text-sm text-slate-500">Loading…</td>
+                <td colSpan={privileged ? 26 : 17} className="px-4 py-10 text-center text-sm text-content-muted">Loading…</td>
               </tr>
             )}
           </tbody>
@@ -314,14 +314,14 @@ function MidasHoursView({ store }) {
       {/* Add employee to roster */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
-          className="w-48 rounded border border-slate-700 bg-slate-800 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-500"
+          className="w-48 rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-sm text-content-primary outline-none focus:border-hairline-strong"
           placeholder="New employee name"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && newName.trim() && onAdd()}
         />
         <select
-          className="rounded border border-slate-700 bg-slate-800 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-500"
+          className="rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-sm text-content-primary outline-none focus:border-hairline-strong"
           value={newPos}
           onChange={(e) => setNewPos(e.target.value)}
         >
@@ -332,7 +332,7 @@ function MidasHoursView({ store }) {
         <PrimaryBtn onClick={onAdd} disabled={!newName.trim()}>
           <Plus className="h-4 w-4" /> Add employee
         </PrimaryBtn>
-        <p className="ml-auto text-xs text-slate-500">
+        <p className="ml-auto text-xs text-content-muted">
           {privileged ? "Changes save automatically." : (
             <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Pay data is office-only. Changes save automatically.</span>
           )}
@@ -381,10 +381,10 @@ function SummaryStat({ label, value, target, ratio }) {
   const over = target != null && ratio != null && ratio > target;
   return (
     <Card className="p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</p>
-      <p className={"pgw-display mt-0.5 text-xl font-bold " + (over ? "text-red-400" : "text-white")}>{value}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-content-secondary">{label}</p>
+      <p className={"pgw-display mt-0.5 text-xl font-bold " + (over ? "text-danger" : "text-content-primary")}>{value}</p>
       {target != null && (
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-content-muted">
           target ≤ {Math.round(target * 100)}%{over ? " · over" : ""}
         </p>
       )}

@@ -42,11 +42,11 @@ function ScopeSelect({ role, value, onChange, regions, districts, stores }) {
       </select>
     );
   }
-  return <span className="text-sm text-slate-500">All 36 stores</span>;
+  return <span className="text-sm text-content-muted">All 36 stores</span>;
 }
 
 const selectCls =
-  "w-full rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-sm text-slate-100 outline-none focus:border-slate-500";
+  "w-full rounded-md border border-hairline-strong bg-surface-overlay px-2.5 py-1.5 text-sm text-content-primary outline-none focus:border-hairline-strong";
 
 function UserRow({ user, regions, districts, stores, isSelf, onSave, onRevoke }) {
   const [role, setRole] = useState(user.role || "store");
@@ -85,10 +85,10 @@ function UserRow({ user, regions, districts, stores, isSelf, onSave, onRevoke })
   };
 
   return (
-    <tr className="border-b border-slate-800 last:border-0">
+    <tr className="border-b border-hairline last:border-0">
       <td className="px-4 py-3">
-        <p className="text-sm font-medium text-white">{user.full_name || "—"}</p>
-        <p className="text-xs text-slate-500">{user.email}</p>
+        <p className="text-sm font-medium text-content-primary">{user.full_name || "—"}</p>
+        <p className="text-xs text-content-muted">{user.email}</p>
       </td>
       <td className="px-3 py-3">
         <select className={selectCls} value={role} onChange={(e) => onRoleChange(e.target.value)}>
@@ -106,7 +106,7 @@ function UserRow({ user, regions, districts, stores, isSelf, onSave, onRevoke })
             <Check className="h-4 w-4" /> {saving ? "Saving…" : "Save"}
           </GhostBtn>
           {!isSelf && user.role && (
-            <GhostBtn onClick={revoke} disabled={revoking} className="text-red-400 hover:text-red-300" title="Revoke access">
+            <GhostBtn onClick={revoke} disabled={revoking} className="text-danger hover:text-danger" title="Revoke access">
               <ShieldOff className="h-4 w-4" /> {revoking ? "…" : "Revoke"}
             </GhostBtn>
           )}
@@ -143,32 +143,32 @@ function InviteModal({ regions, districts, stores, onCreate, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4" onClick={onClose}>
       <Card className="w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="pgw-display text-base font-bold text-white">Add a user</h3>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-white">
+          <h3 className="pgw-display text-base font-bold text-content-primary">Add a user</h3>
+          <button onClick={onClose} className="rounded-md p-1 text-content-secondary hover:bg-surface-overlay hover:text-content-primary">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {result ? (
           <div className="space-y-3">
-            <p className="text-sm text-slate-300">
-              Account created for <span className="font-medium text-white">{email}</span>. Share this temporary
+            <p className="text-sm text-content-secondary">
+              Account created for <span className="font-medium text-content-primary">{email}</span>. Share this temporary
               password with them — it won't be shown again.
             </p>
-            <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2">
-              <code className="flex-1 text-sm text-white">{result.tempPassword}</code>
+            <div className="flex items-center gap-2 rounded-md border border-hairline-strong bg-surface-overlay px-3 py-2">
+              <code className="flex-1 text-sm text-content-primary">{result.tempPassword}</code>
               <button
                 onClick={() => navigator.clipboard.writeText(result.tempPassword)}
-                className="text-slate-400 hover:text-white"
+                className="text-content-secondary hover:text-content-primary"
                 title="Copy"
               >
                 <Copy className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-content-muted">
               If email confirmations are turned on for this Supabase project, they'll also need to confirm their
               email before signing in.
             </p>
@@ -194,7 +194,7 @@ function InviteModal({ regions, districts, stores, onCreate, onClose }) {
                 <ScopeSelect role={role} value={scopeId} onChange={setScopeId} regions={regions} districts={districts} stores={stores} />
               </Field>
             )}
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && <p className="text-sm text-danger">{error}</p>}
             <PrimaryBtn onClick={submit} disabled={!canSubmit || submitting} className="w-full justify-center">
               {submitting ? "Creating…" : "Create login"}
             </PrimaryBtn>
@@ -223,12 +223,12 @@ export function UsersView() {
       />
 
       {error && (
-        <p className="mb-3 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>
+        <p className="mb-3 rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>
       )}
 
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-slate-800/60 text-left text-xs uppercase tracking-wide text-slate-400">
+          <thead className="bg-surface-overlay text-left text-xs uppercase tracking-wide text-content-secondary">
             <tr>
               <th className="px-4 py-2.5">User</th>
               <th className="px-3 py-2.5">Role</th>
@@ -251,12 +251,12 @@ export function UsersView() {
             ))}
             {!loading && users.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">No users yet.</td>
+                <td colSpan={4} className="px-4 py-10 text-center text-sm text-content-muted">No users yet.</td>
               </tr>
             )}
             {loading && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">Loading…</td>
+                <td colSpan={4} className="px-4 py-10 text-center text-sm text-content-muted">Loading…</td>
               </tr>
             )}
           </tbody>

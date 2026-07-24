@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthProvider.jsx";
-import { Card, Field, LogoMark, T, inputCls } from "./ui.jsx";
+import { Card, Field, LogoMark, inputCls } from "./ui.jsx";
 
 export function LoginScreen() {
   const { signIn, authError, requestPasswordReset } = useAuth();
@@ -43,17 +43,17 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="pgw-root flex min-h-screen items-center justify-center bg-slate-950 p-6">
+    <div className="pgw-root flex min-h-screen items-center justify-center bg-surface-page p-6">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
           <LogoMark size="lg" />
-          <p className="text-xs uppercase tracking-widest text-slate-500">Operations Portal</p>
+          <p className="text-xs uppercase tracking-widest text-content-muted">Operations Portal</p>
         </div>
         <Card className="p-5">
           {mode === "signin" ? (
             <form onSubmit={handleSubmit}>
-              <h1 className="pgw-display mb-1 text-xl font-bold text-white">Sign in</h1>
-              <p className="mb-4 text-sm text-slate-400">Use your store or office login.</p>
+              <h1 className="pgw-display mb-1 text-xl font-bold text-content-primary">Sign in</h1>
+              <p className="mb-4 text-sm text-content-secondary">Use your store or office login.</p>
               <div className="space-y-3">
                 <Field label="Email">
                   <input
@@ -75,19 +75,18 @@ export function LoginScreen() {
                     onChange={(e) => setPassword(e.target.value)}
                   />
                 </Field>
-                {authError && <p className="text-sm text-red-400">{authError}</p>}
+                {authError && <p className="text-sm text-danger">{authError}</p>}
                 <button
                   type="submit"
                   disabled={submitting}
-                  style={{ backgroundColor: T.accent, color: T.accentText }}
-                  className="mt-1 w-full rounded-md px-4 py-2.5 text-sm font-semibold hover:opacity-90 focus:outline-none disabled:opacity-60"
+                  className="mt-1 w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-accent-hover focus:outline-none disabled:bg-surface-overlay disabled:text-content-disabled disabled:cursor-not-allowed"
                 >
                   {submitting ? "Signing in…" : "Sign in"}
                 </button>
                 <button
                   type="button"
                   onClick={goForgot}
-                  className="w-full text-center text-xs text-slate-500 hover:text-slate-300"
+                  className="w-full text-center text-xs text-content-muted hover:text-content-secondary"
                 >
                   Forgot password?
                 </button>
@@ -95,24 +94,23 @@ export function LoginScreen() {
             </form>
           ) : resetSent ? (
             <div>
-              <h1 className="pgw-display mb-1 text-xl font-bold text-white">Check your email</h1>
-              <p className="mb-4 text-sm text-slate-400">
-                If an account exists for <span className="text-slate-200">{email}</span>, we've sent a link to
+              <h1 className="pgw-display mb-1 text-xl font-bold text-content-primary">Check your email</h1>
+              <p className="mb-4 text-sm text-content-secondary">
+                If an account exists for <span className="text-content-primary">{email}</span>, we've sent a link to
                 reset your password. Follow it to choose a new one.
               </p>
               <button
                 type="button"
                 onClick={goSignin}
-                style={{ backgroundColor: T.accent, color: T.accentText }}
-                className="w-full rounded-md px-4 py-2.5 text-sm font-semibold hover:opacity-90 focus:outline-none"
+                className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-accent-hover focus:outline-none"
               >
                 Back to sign in
               </button>
             </div>
           ) : (
             <form onSubmit={handleReset}>
-              <h1 className="pgw-display mb-1 text-xl font-bold text-white">Reset password</h1>
-              <p className="mb-4 text-sm text-slate-400">
+              <h1 className="pgw-display mb-1 text-xl font-bold text-content-primary">Reset password</h1>
+              <p className="mb-4 text-sm text-content-secondary">
                 Enter your account email and we'll send you a link to set a new password.
               </p>
               <div className="space-y-3">
@@ -126,19 +124,18 @@ export function LoginScreen() {
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </Field>
-                {resetError && <p className="text-sm text-red-400">{resetError}</p>}
+                {resetError && <p className="text-sm text-danger">{resetError}</p>}
                 <button
                   type="submit"
                   disabled={submitting}
-                  style={{ backgroundColor: T.accent, color: T.accentText }}
-                  className="mt-1 w-full rounded-md px-4 py-2.5 text-sm font-semibold hover:opacity-90 focus:outline-none disabled:opacity-60"
+                  className="mt-1 w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-accent-hover focus:outline-none disabled:bg-surface-overlay disabled:text-content-disabled disabled:cursor-not-allowed"
                 >
                   {submitting ? "Sending…" : "Send reset link"}
                 </button>
                 <button
                   type="button"
                   onClick={goSignin}
-                  className="w-full text-center text-xs text-slate-500 hover:text-slate-300"
+                  className="w-full text-center text-xs text-content-muted hover:text-content-secondary"
                 >
                   Back to sign in
                 </button>
