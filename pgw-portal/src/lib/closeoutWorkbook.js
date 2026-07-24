@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { buildCloseoutRows, round2 } from "./closeoutRows.js";
 import { computeTotals } from "./drawerMath.js";
+import { CURRENCY_FMT, QTY_FMT, TEXT_FMT } from "./excelFormats.js";
 
 // Multi-store workbook: a Summary sheet plus one sheet per closeout, all built
 // from the same buildCloseoutRows() the single-store CSV uses. Each `closeout`
@@ -24,6 +25,30 @@ const lastFilledCol = (cells) => {
     if (v !== "" && v !== null && v !== undefined) last = i + 1;
   });
   return last;
+};
+// 1-based index of the last cell carrying a format token. Lets a table row keep
+// its full-width border even when trailing cells are blank (e.g. an unused
+// denomination row still spans all four qty/amount columns).
+const lastFmtCol = (fmts) => {
+  let last = 0;
+  fmts.forEach((f, i) => {
+    if (f) last = i + 1;
+  });
+  return last;
+};
+
+// The number format Excel should apply for a given cell token (null = none).
+const numFmtFor = (fmt) =>
+  fmt === "money" ? CURRENCY_FMT : fmt === "qty" ? QTY_FMT : fmt === "text" ? TEXT_FMT : null;
+
+// Coerce a raw cell value to what Excel should store for its token: money/qty as
+// real numbers (blank stays blank, never 0), text as a string so leading zeros
+// survive, everything else untouched.
+const cellValue = (v, fmt) => {
+  const empty = v === "" || v === null || v === undefined;
+  if (fmt === "money" || fmt === "qty") return empty ? null : Number(v);
+  if (fmt === "text") return empty ? null : String(v);
+  return v;
 };
 
 const fmtDate = (iso) => {
@@ -52,8 +77,14 @@ function uniqueName(name, used) {
 function renderCloseoutSheet(ws, c) {
   ws.columns = [{ width: 34 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 16 }];
   for (const r of buildCloseoutRows(c, c.store)) {
-    const row = ws.addRow(r.cells.map((v) => (typeof v === "number" ? round2(v) : v)));
+    const row = ws.addRow(r.cells.map((v, i) => cellValue(v, r.fmts[i])));
     const n = row.number;
+    // numFmt is set per cell (not per column) because a single column carries
+    // qty in the drawer table and money in the deposit table below it.
+    r.fmts.forEach((f, i) => {
+      const nf = numFmtFor(f);
+      if (nf) row.getCell(i + 1).numFmt = nf;
+    });
     if (r.style === "title") {
       ws.mergeCells(n, 1, n, 5);
       row.getCell(1).font = { bold: true, size: 14 };
@@ -71,7 +102,8 @@ function renderCloseoutSheet(ws, c) {
     }
     if (r.style !== "blank") {
       const merged = r.style === "title" || r.style === "sectionTitle";
-      applyBorders(row, 1, merged ? 5 : Math.max(1, lastFilledCol(r.cells)));
+      const to = merged ? 5 : Math.max(1, lastFilledCol(r.cells), lastFmtCol(r.fmts));
+      applyBorders(row, 1, to);
     }
   }
 }
@@ -163,7 +195,7 @@ function buildSummarySheet(ws, closeouts, { startDate, endDate, accessibleStores
   SUMMARY_COLS.forEach((col, i) => {
     const column = ws.getColumn(i + 1);
     column.width = col.width;
-    if (col.money) column.numFmt = "#,##0.00";
+    if (col.money) column.numFmt = CURRENCY_FMT;
   });
   ws.views = [{ state: "frozen", ySplit: 2 }];
 
