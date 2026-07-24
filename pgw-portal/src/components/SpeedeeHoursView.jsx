@@ -9,6 +9,7 @@ import {
 import { money, pct, numOrDash } from "../lib/format.js";
 import { exportSpeedeeCSV, printSpeedee } from "../lib/payrollExport.js";
 import { Card, GhostBtn, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
+import { ConfirmDialog } from "./ConfirmDialog.jsx";
 
 // Field -> saver routing.
 const EMP_FIELDS = ["full_name", "position", "labor_pct_rate", "sales_expectation_flat"];
@@ -37,6 +38,7 @@ export function SpeedeeHoursView({ store }) {
   const timers = useRef({});
   const [newName, setNewName] = useState("");
   const [newPos, setNewPos] = useState("cashier");
+  const [pendingRemove, setPendingRemove] = useState(null); // { id, name } awaiting confirmation
 
   useEffect(() => { setOv({}); }, [store.id, week]);
   useEffect(() => {
@@ -288,7 +290,7 @@ export function SpeedeeHoursView({ store }) {
                   )}
 
                   <td className="px-2 py-1.5 text-right">
-                    <button onClick={() => removeEmployee(empId)} className="text-slate-600 hover:text-red-400" title="Remove employee">
+                    <button onClick={() => setPendingRemove({ id: empId, name: r.employee.full_name })} className="text-slate-600 hover:text-red-400" title="Remove employee">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -338,6 +340,19 @@ export function SpeedeeHoursView({ store }) {
           )}
         </p>
       </div>
+
+      {pendingRemove && (
+        <ConfirmDialog
+          title="Remove employee?"
+          message={`Remove ${pendingRemove.name?.trim() || "this employee"} from the roster? Their past weekly history is kept, but they'll no longer appear on the payroll grid or the schedule. Reactivating them requires an administrator.`}
+          confirmLabel="Remove"
+          onConfirm={() => {
+            removeEmployee(pendingRemove.id);
+            setPendingRemove(null);
+          }}
+          onClose={() => setPendingRemove(null)}
+        />
+      )}
     </div>
   );
 }

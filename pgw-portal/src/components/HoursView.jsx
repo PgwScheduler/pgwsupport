@@ -9,6 +9,7 @@ import { money, pct, numOrDash } from "../lib/format.js";
 import { exportPayrollCSV, printPayroll } from "../lib/payrollExport.js";
 import { SpeedeeHoursView } from "./SpeedeeHoursView.jsx";
 import { Card, GhostBtn, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
+import { ConfirmDialog } from "./ConfirmDialog.jsx";
 
 // The Employee Hours tab follows the store's brand — managers never toggle it.
 export function HoursView({ store }) {
@@ -36,6 +37,7 @@ function Th({ children, className = "" }) {
 
 function MidasHoursView({ store }) {
   const [week, setWeek] = useState(() => thisWeekStart());
+  const [pendingRemove, setPendingRemove] = useState(null); // { id, name } awaiting confirmation
   const {
     rows, privileged, rpcSummary, flatFlags, loading, error,
     addEmployee, updateEmployee, removeEmployee, saveEntry, saveRate, savePay,
@@ -286,7 +288,7 @@ function MidasHoursView({ store }) {
                   )}
 
                   <td className="px-2 py-1.5 text-right">
-                    <button onClick={() => removeEmployee(empId)} className="text-slate-600 hover:text-red-400" title="Remove employee">
+                    <button onClick={() => setPendingRemove({ id: empId, name: r.employee.full_name })} className="text-slate-600 hover:text-red-400" title="Remove employee">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -336,6 +338,19 @@ function MidasHoursView({ store }) {
           )}
         </p>
       </div>
+
+      {pendingRemove && (
+        <ConfirmDialog
+          title="Remove employee?"
+          message={`Remove ${pendingRemove.name?.trim() || "this employee"} from the roster? Their past weekly history is kept, but they'll no longer appear on the payroll grid or the schedule. Reactivating them requires an administrator.`}
+          confirmLabel="Remove"
+          onConfirm={() => {
+            removeEmployee(pendingRemove.id);
+            setPendingRemove(null);
+          }}
+          onClose={() => setPendingRemove(null)}
+        />
+      )}
     </div>
   );
 }
