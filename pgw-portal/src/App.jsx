@@ -7,6 +7,7 @@ import { Shell } from "./components/Shell.jsx";
 import { Card, LogoMark } from "./components/ui.jsx";
 import { DashboardView } from "./components/DashboardView.jsx";
 import { HoursView } from "./components/HoursView.jsx";
+import { ScheduleView } from "./components/schedule/ScheduleView.jsx";
 import { DrawerView } from "./components/drawer/DrawerView.jsx";
 import { DocumentsView } from "./components/DocumentsView.jsx";
 import { TrainingView } from "./components/TrainingView.jsx";
@@ -80,6 +81,7 @@ export default function App() {
     <Shell view={view} setView={setView}>
       {view === "dashboard" && <DashboardView key={"dashboard-" + currentStore.id} store={currentStore} />}
       {view === "hours" && <HoursView key={"hours-" + currentStore.id} store={currentStore} />}
+      {view === "schedule" && <ScheduleView key={"schedule-" + currentStore.id} store={currentStore} />}
       {view === "drawer" && <DrawerView key={"drawer-" + currentStore.id} store={currentStore} />}
       {view === "documents" && <DocumentsView key={"documents-" + currentStore.id} store={currentStore} />}
       {view === "training" && <TrainingView />}
