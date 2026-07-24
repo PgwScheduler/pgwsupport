@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  LogOut, LayoutDashboard, GraduationCap, Banknote, Clock, FileText,
+  LogOut, LayoutDashboard, GraduationCap, Banknote, Clock, CalendarDays, FileText,
   ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound,
 } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
@@ -13,6 +13,7 @@ const NAV = [
   { key: "training", label: "Training", icon: GraduationCap },
   { key: "drawer", label: "Cash Drawer", icon: Banknote },
   { key: "hours", label: "Employee Hours", icon: Clock },
+  { key: "schedule", label: "Employee Schedule", icon: CalendarDays },
   { key: "documents", label: "Documents", icon: FileText },
 ];
 
