@@ -12,7 +12,7 @@ const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "training", label: "Training", icon: GraduationCap },
   { key: "drawer", label: "Cash Drawer", icon: Banknote },
-  { key: "hours", label: "Employee Hours", icon: Clock },
+  { key: "hours", label: "Payroll", icon: Clock },
   { key: "schedule", label: "Employee Schedule", icon: CalendarDays },
   { key: "documents", label: "Documents", icon: FileText },
 ];
