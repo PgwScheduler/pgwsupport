@@ -89,35 +89,35 @@ export function DayDetailModal({ store, date, roster, shifts, onClose, addShift,
     s.employee?.full_name || roster.find((r) => r.id === s.employee_id)?.full_name || "—";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4" onClick={onClose}>
       <Card className="max-h-[90vh] w-full max-w-lg overflow-auto p-5" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h3 className="pgw-display text-base font-bold text-white">{prettyDate(date)}</h3>
-            <p className="text-xs text-slate-500">
+            <h3 className="pgw-display text-base font-bold text-content-primary">{prettyDate(date)}</h3>
+            <p className="text-xs text-content-muted">
               #{store.store_number} · {store.name}
             </p>
           </div>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-white">
+          <button onClick={onClose} className="rounded-md p-1 text-content-secondary hover:bg-surface-overlay hover:text-content-primary">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="mb-4 space-y-1.5">
           {shifts.length === 0 ? (
-            <p className="text-sm text-slate-500">No shifts scheduled.</p>
+            <p className="text-sm text-content-muted">No shifts scheduled.</p>
           ) : (
             shifts.map((s) => (
               <div
                 key={s.id}
                 className={
                   "flex items-center justify-between rounded-md border px-3 py-2 " +
-                  (editingId === s.id ? "border-slate-600 bg-slate-800" : "border-slate-800 bg-slate-950/40")
+                  (editingId === s.id ? "border-hairline-strong bg-surface-overlay" : "border-hairline bg-surface-overlay")
                 }
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-100">{empName(s)}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="truncate text-sm font-medium text-content-primary">{empName(s)}</p>
+                  <p className="text-xs text-content-secondary">
                     {fmtTime(s.start_time)}–{fmtTime(s.end_time)} · {fmtHours(shiftHours(s.start_time, s.end_time))} h
                     {s.notes ? ` · ${s.notes}` : ""}
                   </p>
@@ -125,7 +125,7 @@ export function DayDetailModal({ store, date, roster, shifts, onClose, addShift,
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => startEdit(s)}
-                    className="rounded p-1.5 text-slate-400 hover:bg-slate-700 hover:text-white"
+                    className="rounded p-1.5 text-content-secondary hover:bg-surface-overlay hover:text-content-primary"
                     title="Edit shift"
                   >
                     <Pencil className="h-4 w-4" />
@@ -133,7 +133,7 @@ export function DayDetailModal({ store, date, roster, shifts, onClose, addShift,
                   <button
                     onClick={() => remove(s.id)}
                     disabled={busy}
-                    className="rounded p-1.5 text-slate-400 hover:bg-slate-700 hover:text-red-300 disabled:opacity-50"
+                    className="rounded p-1.5 text-content-secondary hover:bg-surface-overlay hover:text-danger disabled:text-content-disabled disabled:cursor-not-allowed"
                     title="Delete shift"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -144,8 +144,8 @@ export function DayDetailModal({ store, date, roster, shifts, onClose, addShift,
           )}
         </div>
 
-        <form onSubmit={submit} className="space-y-3 border-t border-slate-800 pt-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <form onSubmit={submit} className="space-y-3 border-t border-hairline pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-content-secondary">
             {editingId ? "Edit shift" : "Add shift"}
           </p>
           <Field label="Employee">
@@ -167,19 +167,19 @@ export function DayDetailModal({ store, date, roster, shifts, onClose, addShift,
             </Field>
           </div>
           {endAfterStart && (
-            <p className="text-xs text-slate-500">{fmtHours(shiftHours(form.start_time, form.end_time))} scheduled hours</p>
+            <p className="text-xs text-content-muted">{fmtHours(shiftHours(form.start_time, form.end_time))} scheduled hours</p>
           )}
           <Field label="Note (optional)">
             <input className={inputCls} value={form.notes} onChange={set("notes")} placeholder="e.g. covering front" />
           </Field>
 
           {overlapWarning && (
-            <p className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300">
+            <p className="flex items-center gap-1.5 rounded-md border border-warning-border bg-warning-tint px-2.5 py-1.5 text-xs text-warning">
               <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
               This overlaps another shift for the same employee. You can still save it.
             </p>
           )}
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
 
           <div className="flex items-center gap-2">
             <PrimaryBtn type="submit" disabled={busy}>

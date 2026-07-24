@@ -53,18 +53,18 @@ export function ChangePasswordModal({ onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4" onClick={onClose}>
       <Card className="w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="pgw-display text-base font-bold text-white">Change password</h3>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-white">
+          <h3 className="pgw-display text-base font-bold text-content-primary">Change password</h3>
+          <button onClick={onClose} className="rounded-md p-1 text-content-secondary hover:bg-surface-overlay hover:text-content-primary">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {done ? (
           <div className="space-y-3">
-            <p className="text-sm text-slate-300">Your password has been updated.</p>
+            <p className="text-sm text-content-secondary">Your password has been updated.</p>
             <PrimaryBtn onClick={onClose} className="w-full justify-center">Done</PrimaryBtn>
           </div>
         ) : (
@@ -96,7 +96,7 @@ export function ChangePasswordModal({ onClose }) {
                 onChange={(e) => setConfirm(e.target.value)}
               />
             </Field>
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && <p className="text-sm text-danger">{error}</p>}
             <PrimaryBtn type="submit" disabled={submitting} className="w-full justify-center">
               {submitting ? "Saving…" : "Update password"}
             </PrimaryBtn>

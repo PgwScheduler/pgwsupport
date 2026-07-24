@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthProvider.jsx";
-import { Card, Field, LogoMark, T, inputCls } from "./ui.jsx";
+import { Card, Field, LogoMark, inputCls } from "./ui.jsx";
 
 const MIN_LEN = 8;
 
@@ -38,16 +38,16 @@ export function SetPasswordScreen() {
   };
 
   return (
-    <div className="pgw-root flex min-h-screen items-center justify-center bg-slate-950 p-6">
+    <div className="pgw-root flex min-h-screen items-center justify-center bg-surface-page p-6">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
           <LogoMark size="lg" />
-          <p className="text-xs uppercase tracking-widest text-slate-500">Operations Portal</p>
+          <p className="text-xs uppercase tracking-widest text-content-muted">Operations Portal</p>
         </div>
         <Card className="p-5">
           <form onSubmit={handleSubmit}>
-            <h1 className="pgw-display mb-1 text-xl font-bold text-white">Set a new password</h1>
-            <p className="mb-4 text-sm text-slate-400">Choose a new password for your account.</p>
+            <h1 className="pgw-display mb-1 text-xl font-bold text-content-primary">Set a new password</h1>
+            <p className="mb-4 text-sm text-content-secondary">Choose a new password for your account.</p>
             <div className="space-y-3">
               <Field label="New password">
                 <input
@@ -69,19 +69,18 @@ export function SetPasswordScreen() {
                   onChange={(e) => setConfirm(e.target.value)}
                 />
               </Field>
-              {error && <p className="text-sm text-red-400">{error}</p>}
+              {error && <p className="text-sm text-danger">{error}</p>}
               <button
                 type="submit"
                 disabled={submitting}
-                style={{ backgroundColor: T.accent, color: T.accentText }}
-                className="mt-1 w-full rounded-md px-4 py-2.5 text-sm font-semibold hover:opacity-90 focus:outline-none disabled:opacity-60"
+                className="mt-1 w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-accent-hover focus:outline-none disabled:bg-surface-overlay disabled:text-content-disabled disabled:cursor-not-allowed"
               >
                 {submitting ? "Saving…" : "Save password"}
               </button>
               <button
                 type="button"
                 onClick={handleCancel}
-                className="w-full text-center text-xs text-slate-500 hover:text-slate-300"
+                className="w-full text-center text-xs text-content-muted hover:text-content-secondary"
               >
                 Cancel
               </button>

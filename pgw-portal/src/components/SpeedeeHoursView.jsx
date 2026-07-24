@@ -18,9 +18,9 @@ const PAY_FIELDS = ["paycheck_amount"];
 // everything else (pto/clock/spiffs/labor_sales) goes through saveEntry.
 
 const cell =
-  "w-16 rounded border border-slate-700 bg-slate-800 px-1 py-1 text-right text-sm text-slate-100 outline-none focus:border-slate-500";
-const roCell = "w-16 px-1 py-1 text-right text-sm text-slate-400";
-const compCell = "px-2 py-1 text-right text-sm font-semibold text-white whitespace-nowrap";
+  "w-16 rounded border border-hairline-strong bg-surface-overlay px-1 py-1 text-right text-sm text-content-primary outline-none focus:border-hairline-strong";
+const roCell = "w-16 px-1 py-1 text-right text-sm text-content-secondary";
+const compCell = "px-2 py-1 text-right text-sm font-semibold text-content-primary whitespace-nowrap";
 
 function Th({ children, className = "" }) {
   return <th className={"px-2 py-2 text-right font-medium whitespace-nowrap " + className}>{children}</th>;
@@ -133,7 +133,7 @@ export function SpeedeeHoursView({ store }) {
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1">
               <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, -1))}><ChevronLeft className="h-4 w-4" /></GhostBtn>
-              <div className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200">
+              <div className="rounded-md border border-hairline-strong bg-surface-overlay px-3 py-2 text-sm font-medium text-content-primary">
                 Week of {weekLabel(week)}
               </div>
               <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, 1))}><ChevronRight className="h-4 w-4" /></GhostBtn>
@@ -149,7 +149,7 @@ export function SpeedeeHoursView({ store }) {
       />
 
       {error && (
-        <p className="mb-3 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>
+        <p className="mb-3 rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>
       )}
 
       <p className="mb-3 text-xs font-semibold uppercase tracking-wide" style={{ color: T.accentSoftText }}>
@@ -163,7 +163,7 @@ export function SpeedeeHoursView({ store }) {
           label="Actual Weekly Sales"
           value={
             <input
-              className="w-full rounded border border-slate-700 bg-slate-800 px-2 py-1 text-right text-lg font-bold text-white outline-none focus:border-slate-500"
+              className="w-full rounded border border-hairline-strong bg-surface-overlay px-2 py-1 text-right text-lg font-bold text-content-primary outline-none focus:border-hairline-strong"
               value={salesInput}
               onChange={(e) => {
                 setSalesInput(e.target.value);
@@ -184,7 +184,7 @@ export function SpeedeeHoursView({ store }) {
 
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-slate-800/60 text-left text-xs uppercase tracking-wide text-slate-400">
+          <thead className="bg-surface-overlay text-left text-xs uppercase tracking-wide text-content-secondary">
             <tr>
               <Th className="text-left">Position</Th>
               <Th className="text-left">Employee</Th>
@@ -200,7 +200,7 @@ export function SpeedeeHoursView({ store }) {
               <Th>Sales Exp.</Th>
               {privileged && (
                 <>
-                  <Th className="border-l border-slate-700">Hourly Rate</Th>
+                  <Th className="border-l border-hairline-strong">Hourly Rate</Th>
                   <Th>Hrly Earn</Th>
                   <Th>OT</Th>
                   <Th>Hrly & OT</Th>
@@ -211,17 +211,17 @@ export function SpeedeeHoursView({ store }) {
               <Th></Th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className="divide-y divide-hairline">
             {merged.map((r) => {
               const empId = r.employee.id;
               const sc = computeSpeedeeStoreRow(r.mEntry, r.roleSalesRate);
               const ref = privileged ? computeSpeedeeRefRow(r.mEntry, r.mRate) : null;
               const eligible = !!r.employee.labor_pct_eligible;
               return (
-                <tr key={empId}>
+                <tr key={empId} className="odd:bg-surface-stripe hover:bg-surface-overlay">
                   <td className="px-2 py-1.5">
                     <select
-                      className="rounded border border-transparent bg-transparent py-1 text-sm text-slate-200 outline-none focus:border-slate-600 focus:bg-slate-800"
+                      className="rounded border border-transparent bg-transparent py-1 text-sm text-content-primary outline-none focus:border-hairline-strong focus:bg-surface-overlay"
                       value={r.employee.position}
                       onChange={(e) => updateEmployee(empId, { position: e.target.value })}
                     >
@@ -230,7 +230,7 @@ export function SpeedeeHoursView({ store }) {
                   </td>
                   <td className="px-2 py-1.5">
                     <input
-                      className="w-36 rounded border border-transparent bg-transparent px-1 py-1 text-sm font-medium text-white outline-none focus:border-slate-600 focus:bg-slate-800"
+                      className="w-36 rounded border border-transparent bg-transparent px-1 py-1 text-sm font-medium text-content-primary outline-none focus:border-hairline-strong focus:bg-surface-overlay"
                       value={val(empId, "full_name", r.employee.full_name)}
                       onChange={(e) => commit(empId, "full_name", e.target.value)}
                       placeholder="Name"
@@ -269,13 +269,13 @@ export function SpeedeeHoursView({ store }) {
 
                   {privileged && (
                     <>
-                      <td className="border-l border-slate-700 px-1 py-1.5 text-right">
+                      <td className="border-l border-hairline-strong px-1 py-1.5 text-right">
                         <NumCell inline field="hourly_rate" empId={empId} val={val} commit={commit} server={r.mRate.hourly_rate} />
                       </td>
-                      <td className={compCell + " text-slate-400"}>{money(ref.hourlyEarned)}</td>
-                      <td className={compCell + " text-slate-400"}>{money(ref.otEarned)}</td>
-                      <td className={compCell + " text-slate-400"}>{money(ref.hourlyAndOt)}</td>
-                      <td className={compCell + " text-slate-400"}>{money(sc.laborPctPay)}</td>
+                      <td className={compCell + " text-content-secondary"}>{money(ref.hourlyEarned)}</td>
+                      <td className={compCell + " text-content-secondary"}>{money(ref.otEarned)}</td>
+                      <td className={compCell + " text-content-secondary"}>{money(ref.hourlyAndOt)}</td>
+                      <td className={compCell + " text-content-secondary"}>{money(sc.laborPctPay)}</td>
                       <td className="px-1 py-1.5 text-right">
                         <input
                           className={cell + " w-20"}
@@ -290,7 +290,7 @@ export function SpeedeeHoursView({ store }) {
                   )}
 
                   <td className="px-2 py-1.5 text-right">
-                    <button onClick={() => setPendingRemove({ id: empId, name: r.employee.full_name })} className="text-slate-600 hover:text-red-400" title="Remove employee">
+                    <button onClick={() => setPendingRemove({ id: empId, name: r.employee.full_name })} className="text-content-muted hover:text-danger" title="Remove employee">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -298,34 +298,34 @@ export function SpeedeeHoursView({ store }) {
               );
             })}
             {!loading && rows.length === 0 && (
-              <tr><td colSpan={privileged ? 19 : 13} className="px-4 py-10 text-center text-sm text-slate-500">
+              <tr><td colSpan={privileged ? 19 : 13} className="px-4 py-10 text-center text-sm text-content-muted">
                 No employees on the roster yet. Add one below to start the week.
               </td></tr>
             )}
             {loading && (
-              <tr><td colSpan={privileged ? 19 : 13} className="px-4 py-10 text-center text-sm text-slate-500">Loading…</td></tr>
+              <tr><td colSpan={privileged ? 19 : 13} className="px-4 py-10 text-center text-sm text-content-muted">Loading…</td></tr>
             )}
           </tbody>
         </table>
       </Card>
 
       {privileged && (
-        <p className="mt-2 text-xs text-slate-500">
-          Hourly / OT / Labor % Pay are <span className="font-medium text-slate-400">reference figures</span> to
+        <p className="mt-2 text-xs text-content-muted">
+          Hourly / OT / Labor % Pay are <span className="font-medium text-content-secondary">reference figures</span> to
           sanity-check the paycheck you enter — they do not calculate it.
         </p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
-          className="w-48 rounded border border-slate-700 bg-slate-800 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-500"
+          className="w-48 rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-sm text-content-primary outline-none focus:border-hairline-strong"
           placeholder="New employee name"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && newName.trim() && onAdd()}
         />
         <select
-          className="rounded border border-slate-700 bg-slate-800 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-500"
+          className="rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-sm text-content-primary outline-none focus:border-hairline-strong"
           value={newPos}
           onChange={(e) => setNewPos(e.target.value)}
         >
@@ -334,7 +334,7 @@ export function SpeedeeHoursView({ store }) {
         <PrimaryBtn onClick={onAdd} disabled={!newName.trim()}>
           <Plus className="h-4 w-4" /> Add employee
         </PrimaryBtn>
-        <p className="ml-auto text-xs text-slate-500">
+        <p className="ml-auto text-xs text-content-muted">
           {privileged ? "Changes save automatically." : (
             <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Pay data is office-only. Changes save automatically.</span>
           )}
@@ -374,10 +374,10 @@ function SummaryStat({ label, value, target, ratio }) {
   const over = target != null && ratio != null && ratio > target;
   return (
     <Card className="p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</p>
-      <div className={"pgw-display mt-0.5 text-xl font-bold " + (over ? "text-red-400" : "text-white")}>{value}</div>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-content-secondary">{label}</p>
+      <div className={"pgw-display mt-0.5 text-xl font-bold " + (over ? "text-danger" : "text-content-primary")}>{value}</div>
       {target != null && (
-        <p className="text-[11px] text-slate-500">target ≤ {Math.round(target * 100)}%{over ? " · over" : ""}</p>
+        <p className="text-[11px] text-content-muted">target ≤ {Math.round(target * 100)}%{over ? " · over" : ""}</p>
       )}
     </Card>
   );

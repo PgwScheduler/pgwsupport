@@ -40,13 +40,13 @@ export function FileBrowser({ items, loading, error, onAddFolder, onUpload, onDe
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1 text-sm">
-          <button onClick={() => setFolderId(null)} className="flex items-center gap-1 text-slate-400 hover:text-white">
+          <button onClick={() => setFolderId(null)} className="flex items-center gap-1 text-content-secondary hover:text-content-primary">
             <Home className="h-3.5 w-3.5" /> {rootLabel}
           </button>
           {path.map((f) => (
             <span key={f.id} className="flex items-center gap-1">
-              <ChevronRight className="h-3 w-3 text-slate-600" />
-              <button onClick={() => setFolderId(f.id)} className="text-slate-300 hover:text-white">{f.title}</button>
+              <ChevronRight className="h-3 w-3 text-content-muted" />
+              <button onClick={() => setFolderId(f.id)} className="text-content-secondary hover:text-content-primary">{f.title}</button>
             </span>
           ))}
         </div>
@@ -62,7 +62,7 @@ export function FileBrowser({ items, loading, error, onAddFolder, onUpload, onDe
       </div>
 
       {error && (
-        <p className="mb-3 rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-400">{error}</p>
+        <p className="mb-3 rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>
       )}
 
       {newFolder !== null && (
@@ -76,12 +76,12 @@ export function FileBrowser({ items, loading, error, onAddFolder, onUpload, onDe
             onKeyDown={(e) => e.key === "Enter" && createFolder()}
           />
           <PrimaryBtn onClick={createFolder}>Create</PrimaryBtn>
-          <button onClick={() => setNewFolder(null)} className="text-sm text-slate-400 hover:text-white">Cancel</button>
+          <button onClick={() => setNewFolder(null)} className="text-sm text-content-secondary hover:text-content-primary">Cancel</button>
         </div>
       )}
 
       {loading ? (
-        <p className="px-1 py-6 text-center text-sm text-slate-500">Loading…</p>
+        <p className="px-1 py-6 text-center text-sm text-content-muted">Loading…</p>
       ) : folders.length === 0 && files.length === 0 ? (
         <Empty icon={Folder} title="This folder is empty" hint={emptyHint} />
       ) : (
@@ -89,13 +89,13 @@ export function FileBrowser({ items, loading, error, onAddFolder, onUpload, onDe
           {folders.length > 0 && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {folders.map((f) => (
-                <Card key={f.id} className="group flex items-center gap-3 p-3 hover:border-slate-600">
+                <Card key={f.id} className="group flex items-center gap-3 p-3 hover:border-hairline-strong">
                   <button onClick={() => setFolderId(f.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                     <Folder className="h-5 w-5 flex-shrink-0" style={{ color: T.accent }} />
-                    <span className="truncate text-sm font-medium text-slate-100">{f.title}</span>
+                    <span className="truncate text-sm font-medium text-content-primary">{f.title}</span>
                   </button>
                   {canDelete && (
-                    <button onClick={() => onDelete(f)} className="text-slate-600 opacity-0 hover:text-red-400 group-hover:opacity-100">
+                    <button onClick={() => onDelete(f)} className="text-content-muted opacity-0 hover:text-danger group-hover:opacity-100">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
@@ -107,15 +107,15 @@ export function FileBrowser({ items, loading, error, onAddFolder, onUpload, onDe
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {files.map((f) => (
                 <Card key={f.id} className="group flex items-start gap-3 p-3">
-                  <button onClick={() => onOpenFile(f)} className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-slate-800 hover:bg-slate-700">
-                    <FileIcon className="h-4 w-4 text-slate-400" />
+                  <button onClick={() => onOpenFile(f)} className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-surface-overlay hover:bg-surface-overlay">
+                    <FileIcon className="h-4 w-4 text-content-secondary" />
                   </button>
                   <button onClick={() => onOpenFile(f)} className="min-w-0 flex-1 text-left">
-                    <p className="truncate text-sm font-medium text-slate-100 hover:underline">{f.title}</p>
-                    <p className="text-xs text-slate-500">{f.doc_type}{f.created_at ? " · " + f.created_at.slice(0, 10) : ""}</p>
+                    <p className="truncate text-sm font-medium text-content-primary hover:underline">{f.title}</p>
+                    <p className="text-xs text-content-muted">{f.doc_type}{f.created_at ? " · " + f.created_at.slice(0, 10) : ""}</p>
                   </button>
                   {canDelete && (
-                    <button onClick={() => onDelete(f)} className="text-slate-600 opacity-0 hover:text-red-400 group-hover:opacity-100">
+                    <button onClick={() => onDelete(f)} className="text-content-muted opacity-0 hover:text-danger group-hover:opacity-100">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
