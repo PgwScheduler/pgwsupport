@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, CheckCircle2, CircleDashed, Save, Send, ListChecks } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, CircleDashed, Save, Send, ListChecks, Target } from "lucide-react";
 import { useDailyKpi, SUMMARY_FIELDS } from "../hooks/useDailyKpi.js";
+import { useMonthlyGoals } from "../hooks/useMonthlyGoals.js";
 import { SectionHeader, Card, PrimaryBtn, GhostBtn, Empty, inputCls, T } from "./ui.jsx";
+import { money, numOrDash } from "../lib/format.js";
 
 // --- date helpers (timezone-naive local dates; never UTC) -------------------
 function todayLocal() {
@@ -23,6 +25,62 @@ function prettyStamp(ts) {
   return new Date(ts).toLocaleString(undefined, {
     month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
   });
+}
+function monthLabel(iso) {
+  const [y, m] = iso.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function GoalTile({ label, value, sub }) {
+  return (
+    <div className="rounded-lg border border-hairline bg-surface-page p-3">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-content-muted">{label}</p>
+      <p className="pgw-display mt-1 text-lg font-bold text-content-primary">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-content-muted">{sub}</p>}
+    </div>
+  );
+}
+
+function GoalsStrip({ goals, businessDate }) {
+  if (goals.loading && goals.gpTarget == null) {
+    return (
+      <Card className="mb-4 p-5">
+        <p className="text-sm text-content-muted">Loading goals…</p>
+      </Card>
+    );
+  }
+  if (goals.gpTarget == null) {
+    return (
+      <Card className="mb-4 p-5">
+        <p className="text-sm text-content-muted">No goal set for {monthLabel(businessDate)}.</p>
+      </Card>
+    );
+  }
+  const paceValue = goals.dailyPace == null ? "—" : money(goals.dailyPace);
+  return (
+    <Card className="mb-4 p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Target className="h-4 w-4 text-content-muted" />
+        <h3 className="pgw-display text-sm font-bold text-content-primary">{monthLabel(businessDate)} goals</h3>
+        <span className="text-xs text-content-muted">GP before labor — technician labor not yet deducted</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <GoalTile label="Month GP target" value={money(goals.gpTarget)} sub="GP before labor" />
+        <GoalTile label="Month to date" value={money(goals.mtdActual)} sub={`${goals.elapsed} of ${goals.daysOpen} days`} />
+        <GoalTile
+          label="Daily pace needed"
+          value={paceValue}
+          sub={goals.targetMet ? "Target met" : goals.remaining > 0 ? `over ${goals.remaining} days left` : "no days left"}
+        />
+        {goals.hasCarsGoal && (
+          <GoalTile
+            label="Cars / day (actual · goal)"
+            value={`${numOrDash(goals.carsActual, 1)} · ${goals.carsGoal.toFixed(1)}`}
+          />
+        )}
+      </div>
+    </Card>
+  );
 }
 
 // 0 / null render as blank so the sheet is fast to scan and key through.
@@ -52,6 +110,7 @@ function NumField({ label, value, onChange, kind, disabled }) {
 export function TicSheetView({ store }) {
   const [businessDate, setBusinessDate] = useState(todayLocal());
   const { categories, kpi, units, submittedAt, loading, error, save } = useDailyKpi(store, businessDate);
+  const goals = useMonthlyGoals(store, businessDate, todayLocal());
 
   const [unitsState, setUnitsState] = useState({}); // { [catId]: string }
   const [summaryState, setSummaryState] = useState({}); // { [key]: string }
@@ -105,7 +164,10 @@ export function TicSheetView({ store }) {
     const { error: err } = await save({ summary, unitCounts, submit });
     setSaving(false);
     if (err) setSaveError(err.message);
-    else setJustSaved(true);
+    else {
+      setJustSaved(true);
+      goals.reload(); // month-to-date + pace reflect the just-saved day
+    }
   };
 
   const changeDate = (iso) => {
@@ -159,6 +221,10 @@ export function TicSheetView({ store }) {
       </div>
 
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
+      {goals.error && <p className="mb-3 text-sm text-danger">{goals.error}</p>}
+
+      {/* Month goals summary */}
+      <GoalsStrip goals={goals} businessDate={businessDate} />
 
       {/* Service units — the bulk of the sheet */}
       <Card className="mb-4 p-5">
