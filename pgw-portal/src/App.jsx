@@ -9,6 +9,7 @@ import { DashboardView } from "./components/DashboardView.jsx";
 import { HoursView } from "./components/HoursView.jsx";
 import { ScheduleView } from "./components/schedule/ScheduleView.jsx";
 import { DrawerView } from "./components/drawer/DrawerView.jsx";
+import { TicSheetView } from "./components/TicSheetView.jsx";
 import { DocumentsView } from "./components/DocumentsView.jsx";
 import { TrainingView } from "./components/TrainingView.jsx";
 import { UsersView } from "./components/users/UsersView.jsx";
@@ -83,6 +84,7 @@ export default function App() {
       {view === "hours" && <HoursView key={"hours-" + currentStore.id} store={currentStore} />}
       {view === "schedule" && <ScheduleView key={"schedule-" + currentStore.id} store={currentStore} />}
       {view === "drawer" && <DrawerView key={"drawer-" + currentStore.id} store={currentStore} />}
+      {view === "tic" && <TicSheetView key={"tic-" + currentStore.id} store={currentStore} />}
       {view === "documents" && <DocumentsView key={"documents-" + currentStore.id} store={currentStore} />}
       {view === "training" && <TrainingView />}
       {view === "users" && profile.role === "master" && <UsersView />}
