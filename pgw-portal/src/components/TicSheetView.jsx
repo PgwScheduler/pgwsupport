@@ -68,8 +68,17 @@ const BREAKDOWN_FIELDS = [
   { key: "cost_tires", label: "Tire Cost", role: "cost" },
   { key: "sales_supplies", label: "Supplies", role: "sales" },
   { key: "sales_groupon", label: "Groupon", role: "sales" },
-  { key: "sales_discounts", label: "Discounts", role: "sales" },
+  { key: "sales_discounts", label: "Discounts", role: "discount" }, // negative: reduces Sales
 ];
+
+// A discount is stored negative (reduces Sales); costs/sales stay >= 0. Whatever
+// the manager types is coerced to the right sign so Sales math is always correct.
+function signedBreakdownValue(field, raw) {
+  const n = Number(raw);
+  const v = raw === "" || raw == null || !Number.isFinite(n) ? 0 : n;
+  if (field.role === "discount") return -Math.abs(v);
+  return v < 0 ? 0 : v;
+}
 
 // sticky-layout constants (px) — HEAD_H fits the longest vertical label
 const HEAD_H = 196;
@@ -118,15 +127,16 @@ function SalesDetailModal({ dateIso, row, onSave, onClose }) {
     return o;
   });
   const [busy, setBusy] = useState(false);
-  const salesTotal = BREAKDOWN_FIELDS.filter((f) => f.role === "sales").reduce((s, f) => s + toNum(vals[f.key], "money"), 0);
-  const costTotal = BREAKDOWN_FIELDS.filter((f) => f.role === "cost").reduce((s, f) => s + toNum(vals[f.key], "money"), 0);
+  // Sales = revenue lines + discounts (discounts are negative); costs are separate.
+  const salesTotal = BREAKDOWN_FIELDS.filter((f) => f.role !== "cost").reduce((s, f) => s + signedBreakdownValue(f, vals[f.key]), 0);
+  const costTotal = BREAKDOWN_FIELDS.filter((f) => f.role === "cost").reduce((s, f) => s + signedBreakdownValue(f, vals[f.key]), 0);
   const label = new Date(...dateIso.split("-").map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
     .toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 
   const save = async () => {
     setBusy(true);
     const patch = {};
-    for (const f of BREAKDOWN_FIELDS) patch[f.key] = toNum(vals[f.key], "money");
+    for (const f of BREAKDOWN_FIELDS) patch[f.key] = signedBreakdownValue(f, vals[f.key]);
     await onSave(patch);
     setBusy(false);
     onClose();
@@ -143,10 +153,10 @@ function SalesDetailModal({ dateIso, row, onSave, onClose }) {
           {BREAKDOWN_FIELDS.map((f) => (
             <label key={f.key} className="block">
               <span className={"mb-1 block text-xs font-medium uppercase tracking-wide " + (f.role === "cost" ? "text-content-muted" : "text-content-secondary")}>
-                {f.label} ($){f.role === "cost" ? " · cost" : ""}
+                {f.label} ($){f.role === "cost" ? " · cost" : f.role === "discount" ? " · reduces sales" : ""}
               </span>
-              <input type="number" inputMode="decimal" step="0.01" min="0" className={inputCls}
-                value={vals[f.key]} placeholder="0"
+              <input type="number" inputMode="decimal" step="0.01" min={f.role === "discount" ? undefined : "0"}
+                className={inputCls} value={vals[f.key]} placeholder={f.role === "discount" ? "-0.00" : "0"}
                 onChange={(e) => setVals((p) => ({ ...p, [f.key]: e.target.value }))} />
             </label>
           ))}
