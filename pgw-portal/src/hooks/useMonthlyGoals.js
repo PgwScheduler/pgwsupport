@@ -10,7 +10,7 @@ import { countWorkdays, monthStartIso, monthEndIso } from "../lib/workdays.js";
 // `todayIso` anchors the elapsed/remaining working-day split. RLS scopes
 // every read to the store; the view is security_invoker so it obeys the same.
 const KPI_SUM_SELECT =
-  "ro_count, sales_labor, sales_parts, sales_tires, sales_discounts, sales_other, cost_parts, cost_tires";
+  "ro_count, sales_labor, sales_parts, sales_tires, sales_supplies, sales_groupon, sales_discounts, cost_parts, cost_tires";
 
 const EMPTY = {
   loading: false, error: null,
@@ -57,7 +57,7 @@ export function useMonthlyGoals(store, businessDate, todayIso) {
     let gp = 0, ro = 0;
     for (const r of kpiRes.data ?? []) {
       gp += Number(r.sales_labor) + Number(r.sales_parts) + Number(r.sales_tires)
-          + Number(r.sales_discounts) + Number(r.sales_other)
+          + Number(r.sales_supplies) + Number(r.sales_groupon) + Number(r.sales_discounts)
           - Number(r.cost_parts) - Number(r.cost_tires);
       ro += Number(r.ro_count);
     }
