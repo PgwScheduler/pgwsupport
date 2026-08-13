@@ -273,9 +273,14 @@ function MidasHoursView({ store }) {
                         )}
                       </td>
                       <td className="px-1 py-1.5 text-right">
-                        {isManager ? <span className="text-content-muted">x</span> : (
-                          <NumCell inline field="flat_rate_per_hour" empId={empId} val={val} commit={commit} server={r.mRate.flat_rate_per_hour} />
-                        )}
+                        {isManager ? <span className="text-content-muted">x</span>
+                          : r.employee.position === "tech" ? (
+                            // Techs' flat rate is authoritative in the Tech Tracker
+                            // (tech_pay_rates) and synced here — read-only mirror.
+                            <span className="text-content-muted" title="Set in Tech Tracker">{money(r.mRate.flat_rate_per_hour)}</span>
+                          ) : (
+                            <NumCell inline field="flat_rate_per_hour" empId={empId} val={val} commit={commit} server={r.mRate.flat_rate_per_hour} />
+                          )}
                       </td>
                       <td className={compCell}>{isManager ? "x" : money(pc.hourlyEarned)}</td>
                       <td className={compCell}>{isManager ? "x" : money(pc.otEarned)}</td>

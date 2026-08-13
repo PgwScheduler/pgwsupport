@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import { countWorkdays, monthStartIso, monthEndIso } from "../lib/workdays.js";
+import { computeGrossProfit } from "../lib/grossProfit.js";
 
 // Loads the goals summary for one store and the month of `businessDate`:
 //   - month gross profit target (from v_store_monthly_gp_target)
@@ -31,7 +32,7 @@ export function useMonthlyGoals(store, businessDate, todayIso) {
     const start = monthStartIso(year, month);
     const end = monthEndIso(year, month);
 
-    const [tgtRes, carsRes, kpiRes, holRes] = await Promise.all([
+    const [tgtRes, carsRes, kpiRes, holRes, techRes] = await Promise.all([
       supabase.from("v_store_monthly_gp_target")
         .select("gp_target, days_open")
         .eq("location_id", locationId).eq("goal_year", year).eq("goal_month", month)
@@ -47,6 +48,7 @@ export function useMonthlyGoals(store, businessDate, todayIso) {
       supabase.from("holidays")
         .select("holiday_date")
         .gte("holiday_date", start).lte("holiday_date", end),
+      supabase.rpc("tech_store_month", { loc: locationId, month_start: start }),
     ]);
 
     const error =
@@ -54,13 +56,23 @@ export function useMonthlyGoals(store, businessDate, todayIso) {
       kpiRes.error?.message || holRes.error?.message || null;
 
     const holidaySet = new Set((holRes.data ?? []).map((h) => h.holiday_date));
-    let gp = 0, ro = 0;
+
+    // Full gross profit (Part 4): revenue lines from daily_kpi (labor now
+    // comes from the tech tracker), minus cost of sales INCLUDING labor cost.
+    const k = { parts_sales: 0, supplies: 0, tire_sales: 0, groupon: 0, discounts: 0, parts_cost: 0, tire_cost: 0 };
+    let ro = 0;
     for (const r of kpiRes.data ?? []) {
-      gp += Number(r.sales_labor) + Number(r.sales_parts) + Number(r.sales_tires)
-          + Number(r.sales_supplies) + Number(r.sales_groupon) + Number(r.sales_discounts)
-          - Number(r.cost_parts) - Number(r.cost_tires);
+      k.parts_sales += Number(r.sales_parts);
+      k.tire_sales += Number(r.sales_tires);
+      k.supplies += Number(r.sales_supplies);
+      k.groupon += Number(r.sales_groupon);
+      k.discounts += Number(r.sales_discounts);
+      k.parts_cost += Number(r.cost_parts);
+      k.tire_cost += Number(r.cost_tires);
       ro += Number(r.ro_count);
     }
+    const tech = Array.isArray(techRes.data) ? techRes.data[0] ?? null : techRes.data ?? null;
+    const gp = computeGrossProfit(k, tech).grossProfit;
 
     // Total working days for the month (override-aware, from the view).
     const daysOpen = tgtRes.data?.days_open != null

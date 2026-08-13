@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Target, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Target, X, Lock } from "lucide-react";
 import { useMonthlyTicSheet } from "../hooks/useMonthlyTicSheet.js";
 import { useMonthlyGoals } from "../hooks/useMonthlyGoals.js";
 import { SectionHeader, Card, PrimaryBtn, GhostBtn, Empty, inputCls, T } from "./ui.jsx";
@@ -40,11 +40,14 @@ function toNum(raw, kind) {
 }
 // Sales = all revenue lines added (labor+parts+tires+supplies+groupon+discounts).
 // Parts/Tire cost do NOT reduce Sales — they reduce gross profit (goals strip).
-const SALES_KEYS = ["sales_labor", "sales_parts", "sales_tires", "sales_supplies", "sales_groupon", "sales_discounts"];
+// Labor Sales is no longer stored on daily_kpi — it comes from the Tech
+// Tracker per day (read-only). Every sales figure adds that external labor
+// value to the remaining daily_kpi revenue lines.
+const SALES_KEYS_EXLABOR = ["sales_parts", "sales_tires", "sales_supplies", "sales_groupon", "sales_discounts"];
 const COST_KEYS = ["cost_parts", "cost_tires"];
-const salesOf = (row) => SALES_KEYS.reduce((s, k) => s + num(row?.[k]), 0);
-const grossProfitOf = (row) => salesOf(row) - COST_KEYS.reduce((s, k) => s + num(row?.[k]), 0);
-const potentialOf = (row) => salesOf(row) + num(row?.declined_sales);
+const salesOf = (row, laborSales) => num(laborSales) + SALES_KEYS_EXLABOR.reduce((s, k) => s + num(row?.[k]), 0);
+const grossProfitOf = (row, laborSales) => salesOf(row, laborSales) - COST_KEYS.reduce((s, k) => s + num(row?.[k]), 0);
+const potentialOf = (row, laborSales) => salesOf(row, laborSales) + num(row?.declined_sales);
 
 // Day-summary columns, to the right of the service categories.
 const SUMMARY_COLS = [
@@ -61,7 +64,7 @@ const SUMMARY_COLS = [
 // Per-day Sales breakdown panel. `role` marks revenue vs cost so the panel can
 // show both a Sales total (revenue) and Gross profit (revenue − costs).
 const BREAKDOWN_FIELDS = [
-  { key: "sales_labor", label: "Labor Sales", role: "sales" },
+  { key: "sales_labor", label: "Labor Sales", role: "sales", computed: true }, // from Tech Tracker; read-only
   { key: "sales_parts", label: "Parts Sales", role: "sales" },
   { key: "cost_parts", label: "Parts Cost", role: "cost" },
   { key: "sales_tires", label: "Tire Sales", role: "sales" },
@@ -103,10 +106,10 @@ function GoalsStrip({ goals, year, month }) {
       <div className="mb-3 flex items-center gap-2">
         <Target className="h-4 w-4 text-content-muted" />
         <h3 className="pgw-display text-sm font-bold text-content-primary">{monthLabel(year, month)} goals</h3>
-        <span className="text-xs text-content-muted">GP before labor — technician labor not yet deducted</span>
+        <span className="text-xs text-content-muted">Gross profit — technician labor cost included</span>
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <GoalTile label="Month GP target" value={money(goals.gpTarget)} sub="GP before labor" />
+        <GoalTile label="Month GP target" value={money(goals.gpTarget)} sub="Gross profit" />
         <GoalTile label="Month to date" value={money(goals.mtdActual)} sub={`${goals.elapsed} of ${goals.daysOpen} days`} />
         <GoalTile label="Daily pace needed" value={paceValue}
           sub={goals.targetMet ? "Target met" : goals.remaining > 0 ? `over ${goals.remaining} days left` : "no days left"} />
@@ -120,15 +123,17 @@ function GoalsStrip({ goals, year, month }) {
 }
 
 // ---- per-day sales breakdown panel ----------------------------------------
-function SalesDetailModal({ dateIso, row, onSave, onClose }) {
+function SalesDetailModal({ dateIso, row, laborSales, onSave, onClose }) {
   const [vals, setVals] = useState(() => {
     const o = {};
-    for (const f of BREAKDOWN_FIELDS) o[f.key] = numToStr(row?.[f.key]);
+    for (const f of BREAKDOWN_FIELDS) if (!f.computed) o[f.key] = numToStr(row?.[f.key]);
     return o;
   });
   const [busy, setBusy] = useState(false);
-  // Sales = revenue lines + discounts (discounts are negative); costs are separate.
-  const salesTotal = BREAKDOWN_FIELDS.filter((f) => f.role !== "cost").reduce((s, f) => s + signedBreakdownValue(f, vals[f.key]), 0);
+  const labor = num(laborSales);
+  // Sales = Tech-Tracker labor + the remaining revenue lines + discounts
+  // (negative); costs are separate. Labor is computed, never typed here.
+  const salesTotal = labor + BREAKDOWN_FIELDS.filter((f) => f.role !== "cost" && !f.computed).reduce((s, f) => s + signedBreakdownValue(f, vals[f.key]), 0);
   const costTotal = BREAKDOWN_FIELDS.filter((f) => f.role === "cost").reduce((s, f) => s + signedBreakdownValue(f, vals[f.key]), 0);
   const label = new Date(...dateIso.split("-").map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
     .toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
@@ -136,7 +141,7 @@ function SalesDetailModal({ dateIso, row, onSave, onClose }) {
   const save = async () => {
     setBusy(true);
     const patch = {};
-    for (const f of BREAKDOWN_FIELDS) patch[f.key] = signedBreakdownValue(f, vals[f.key]);
+    for (const f of BREAKDOWN_FIELDS) if (!f.computed) patch[f.key] = signedBreakdownValue(f, vals[f.key]);
     await onSave(patch);
     setBusy(false);
     onClose();
@@ -153,11 +158,17 @@ function SalesDetailModal({ dateIso, row, onSave, onClose }) {
           {BREAKDOWN_FIELDS.map((f) => (
             <label key={f.key} className="block">
               <span className={"mb-1 block text-xs font-medium uppercase tracking-wide " + (f.role === "cost" ? "text-content-muted" : "text-content-secondary")}>
-                {f.label} ($){f.role === "cost" ? " · cost" : f.role === "discount" ? " · reduces sales" : ""}
+                {f.label} ($){f.computed ? " · from Tech Tracker" : f.role === "cost" ? " · cost" : f.role === "discount" ? " · reduces sales" : ""}
               </span>
-              <input type="number" inputMode="decimal" step="0.01" min={f.role === "discount" ? undefined : "0"}
-                className={inputCls} value={vals[f.key]} placeholder={f.role === "discount" ? "-0.00" : "0"}
-                onChange={(e) => setVals((p) => ({ ...p, [f.key]: e.target.value }))} />
+              {f.computed ? (
+                <div className={inputCls + " flex items-center justify-between bg-surface-page text-content-muted"}>
+                  <span>{money(labor)}</span><Lock className="h-3.5 w-3.5" />
+                </div>
+              ) : (
+                <input type="number" inputMode="decimal" step="0.01" min={f.role === "discount" ? undefined : "0"}
+                  className={inputCls} value={vals[f.key]} placeholder={f.role === "discount" ? "-0.00" : "0"}
+                  onChange={(e) => setVals((p) => ({ ...p, [f.key]: e.target.value }))} />
+              )}
             </label>
           ))}
         </div>
@@ -186,7 +197,7 @@ export function TicSheetView({ store }) {
   const [month, setMonth] = useState(now.getMonth() + 1); // 1-based
 
   const sheet = useMonthlyTicSheet(store, year, month);
-  const { categories, holidaySet, loading, error, kpiByDate, unitsByDate, saveSummary, saveUnit } = sheet;
+  const { categories, holidaySet, loading, error, kpiByDate, unitsByDate, laborSalesByDate, saveSummary, saveUnit } = sheet;
   const goals = useMonthlyGoals(store, `${year}-${pad2(month)}-01`, todayLocal());
 
   const [detailDate, setDetailDate] = useState(null);
@@ -231,8 +242,8 @@ export function TicSheetView({ store }) {
       sum.declined_sales += num(row.declined_sales);
       sum.credit_apps += num(row.credit_apps);
       sum.credit_dollars += num(row.credit_dollars);
-      sum.sales += salesOf(row);
-      sum.total_potential += potentialOf(row);
+      sum.sales += salesOf(row, laborSalesByDate[day.iso]);
+      sum.total_potential += potentialOf(row, laborSalesByDate[day.iso]);
       const u = unitsByDate[day.iso] || {};
       for (const c of categories) mtdUnits[c.id] = (mtdUnits[c.id] || 0) + num(u[c.id]);
     }
@@ -350,8 +361,8 @@ export function TicSheetView({ store }) {
                   const row = kpiByDate[day.iso];
                   const muted = !day.editable;
                   const dayBg = muted ? "bg-surface-page" : "bg-surface-card";
-                  const sales = salesOf(row);
-                  const potential = potentialOf(row);
+                  const sales = salesOf(row, laborSalesByDate[day.iso]);
+                  const potential = potentialOf(row, laborSalesByDate[day.iso]);
                   const ro = num(row?.ro_count);
                   const calc = {
                     total_potential: potential > 0 ? potential : null,
@@ -449,6 +460,7 @@ export function TicSheetView({ store }) {
         <SalesDetailModal
           dateIso={detailDate}
           row={kpiByDate[detailDate]}
+          laborSales={laborSalesByDate[detailDate]}
           onSave={async (patch) => { await saveSummary(detailDate, patch); scheduleGoals(); }}
           onClose={() => setDetailDate(null)}
         />
