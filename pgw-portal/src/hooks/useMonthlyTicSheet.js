@@ -30,6 +30,10 @@ export function useMonthlyTicSheet(store, year, month) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [holidaySet, setHolidaySet] = useState(() => new Set());
+  // Labor Sales is computed by the Tech Tracker (Σ tech_daily.labor_sales per
+  // day) and is READ-ONLY here, exactly as the spreadsheet has it. Keyed by
+  // business_date; sourced from the tech_store_daily SECURITY DEFINER RPC.
+  const [laborByDate, setLaborByDate] = useState({});
 
   // Live source of truth for grid cells; a tick forces re-render after writes
   // without clobbering the uncontrolled inputs the user is typing into.
@@ -50,14 +54,19 @@ export function useMonthlyTicSheet(store, year, month) {
     const start = monthStartIso(year, month);
     const end = monthEndIso(year, month);
 
-    const [catRes, kpiRes, holRes] = await Promise.all([
+    const [catRes, kpiRes, holRes, laborRes] = await Promise.all([
       supabase.from("brand_service_categories").select(CATEGORY_SELECT)
         .eq("brand", brand).eq("active", true).order("display_order"),
       supabase.from("daily_kpi").select(KPI_SELECT)
         .eq("location_id", locationId).gte("business_date", start).lte("business_date", end),
       supabase.from("holidays").select("holiday_date")
         .gte("holiday_date", start).lte("holiday_date", end),
+      supabase.rpc("tech_store_daily", { loc: locationId, month_start: start }),
     ]);
+
+    const laborMap = {};
+    for (const r of laborRes.data ?? []) laborMap[r.work_date] = Number(r.labor_sales || 0);
+    setLaborByDate(laborMap);
 
     if (catRes.error) setError(catRes.error.message);
     else setCategories(
@@ -143,6 +152,7 @@ export function useMonthlyTicSheet(store, year, month) {
   return {
     categories, holidaySet, loading, error,
     kpiByDate: kpiRef.current, unitsByDate: unitsRef.current,
+    laborSalesByDate: laborByDate,
     saveSummary, saveUnit, reload: load,
   };
 }
