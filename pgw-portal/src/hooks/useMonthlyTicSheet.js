@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../context/AuthProvider.jsx";
-import { monthStartIso, monthEndIso } from "../lib/workdays.js";
+import { countWorkdays, monthStartIso, monthEndIso } from "../lib/workdays.js";
 
 // Loads a whole month of the tic sheet for one store: the brand's service
 // categories, every daily_kpi row + its service-unit counts for the month,
@@ -14,8 +14,10 @@ const CATEGORY_SELECT =
 
 // Every editable / stored daily_kpi field the grid touches. Sales breakdown
 // (labor/parts/tires/discounts/other) is entered in the per-day detail panel.
+// zero_dollar_tickets replaced the unused first_time_customers (migration 25)
+// and has NO Horizon key — upload code must skip it.
 const KPI_COLUMNS = [
-  "ro_count", "first_time_customers", "declined_sales", "credit_apps", "credit_dollars",
+  "ro_count", "zero_dollar_tickets", "declined_sales", "credit_apps", "credit_dollars",
   "sales_labor", "sales_parts", "sales_tires", "sales_supplies", "sales_groupon", "sales_discounts",
   "cost_parts", "cost_tires",
 ];
@@ -30,6 +32,13 @@ export function useMonthlyTicSheet(store, year, month) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [holidaySet, setHolidaySet] = useState(() => new Set());
+  // Header band inputs (migration 25). categoryGoals is keyed by
+  // service_category_id: { goal_pct_of_cars, average_sale }. daysOpen is the
+  // store's planned days for the month — the denominator behind
+  // projected repair orders and therefore behind every New Goal.
+  const [categoryGoals, setCategoryGoals] = useState({});
+  const [zeroDollarPct, setZeroDollarPct] = useState(null);
+  const [daysOpen, setDaysOpen] = useState(0);
   // Labor Sales is computed by the Tech Tracker (Σ tech_daily.labor_sales per
   // day) and is READ-ONLY here, exactly as the spreadsheet has it. Keyed by
   // business_date; sourced from the tech_store_daily SECURITY DEFINER RPC.
@@ -54,7 +63,7 @@ export function useMonthlyTicSheet(store, year, month) {
     const start = monthStartIso(year, month);
     const end = monthEndIso(year, month);
 
-    const [catRes, kpiRes, holRes, laborRes] = await Promise.all([
+    const [catRes, kpiRes, holRes, laborRes, goalRes, ticRes, daysRes] = await Promise.all([
       supabase.from("brand_service_categories").select(CATEGORY_SELECT)
         .eq("brand", brand).eq("active", true).order("display_order"),
       supabase.from("daily_kpi").select(KPI_SELECT)
@@ -62,11 +71,33 @@ export function useMonthlyTicSheet(store, year, month) {
       supabase.from("holidays").select("holiday_date")
         .gte("holiday_date", start).lte("holiday_date", end),
       supabase.rpc("tech_store_daily", { loc: locationId, month_start: start }),
+      supabase.from("store_category_goals")
+        .select("service_category_id, goal_pct_of_cars, average_sale")
+        .eq("location_id", locationId),
+      supabase.from("store_tic_goals").select("zero_dollar_ticket_pct")
+        .eq("location_id", locationId).maybeSingle(),
+      supabase.from("v_store_monthly_gp_target").select("days_open")
+        .eq("location_id", locationId).eq("goal_year", year).eq("goal_month", month)
+        .maybeSingle(),
     ]);
 
     const laborMap = {};
     for (const r of laborRes.data ?? []) laborMap[r.work_date] = Number(r.labor_sales || 0);
     setLaborByDate(laborMap);
+
+    const goalMap = {};
+    for (const g of goalRes.data ?? [])
+      goalMap[g.service_category_id] = {
+        goal_pct_of_cars: Number(g.goal_pct_of_cars || 0),
+        average_sale: Number(g.average_sale || 0),
+      };
+    setCategoryGoals(goalMap);
+    setZeroDollarPct(ticRes.data?.zero_dollar_ticket_pct != null ? Number(ticRes.data.zero_dollar_ticket_pct) : null);
+    // A store with no annual goal row has no planned day count; fall back to
+    // the calendar (Mon–Sat minus holidays), same rule as derived_days_open().
+    setDaysOpen(daysRes.data?.days_open != null
+      ? Number(daysRes.data.days_open)
+      : countWorkdays(start, end, new Set((holRes.data ?? []).map((h) => h.holiday_date))));
 
     if (catRes.error) setError(catRes.error.message);
     else setCategories(
@@ -149,10 +180,35 @@ export function useMonthlyTicSheet(store, year, month) {
     } catch (e) { return { error: e }; }
   }, [ensureRow]);
 
+  // Header band edits. RLS restricts these to admin/master; a store user's
+  // write is rejected by Postgres, not just hidden by the UI.
+  const saveCategoryGoal = useCallback(async (categoryId, patch) => {
+    const prev = categoryGoals[categoryId] || { goal_pct_of_cars: 0, average_sale: 0 };
+    const next = { ...prev, ...patch };
+    const { error: upErr } = await supabase.from("store_category_goals").upsert(
+      { location_id: locationId, service_category_id: categoryId, ...next, updated_at: new Date().toISOString() },
+      { onConflict: "location_id,service_category_id" }
+    );
+    if (upErr) return { error: upErr };
+    setCategoryGoals((p) => ({ ...p, [categoryId]: next }));
+    return { error: null };
+  }, [locationId, categoryGoals]);
+
+  const saveZeroDollarPct = useCallback(async (value) => {
+    const { error: upErr } = await supabase.from("store_tic_goals").upsert(
+      { location_id: locationId, zero_dollar_ticket_pct: value, updated_at: new Date().toISOString() },
+      { onConflict: "location_id" }
+    );
+    if (upErr) return { error: upErr };
+    setZeroDollarPct(value);
+    return { error: null };
+  }, [locationId]);
+
   return {
     categories, holidaySet, loading, error,
     kpiByDate: kpiRef.current, unitsByDate: unitsRef.current,
     laborSalesByDate: laborByDate,
-    saveSummary, saveUnit, reload: load,
+    categoryGoals, zeroDollarPct, daysOpen,
+    saveSummary, saveUnit, saveCategoryGoal, saveZeroDollarPct, reload: load,
   };
 }
