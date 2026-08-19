@@ -89,6 +89,13 @@ function FlagList({ flags }) {
 
 // The three figures no system produces. Blank means blank — the screen
 // never shows an un-entered number as a zero result.
+//
+// The review count is the store's own to report, so anyone with access to
+// the store may enter it. Phone conversion and the Model D referral GP
+// credit stay admin-only: the referral credit adds straight into the
+// gross profit the bonus is calculated on, so a store that could type its
+// own number could inflate its own payout. Enforced in the database by
+// migration 27, not just here.
 function InputsPanel({ model, inputs, canEdit, onSave, onClose }) {
   const [vals, setVals] = useState({
     google_reviews: inputs?.google_reviews ?? "",
@@ -100,11 +107,16 @@ function InputsPanel({ model, inputs, canEdit, onSave, onClose }) {
 
   const save = async () => {
     setBusy(true);
-    await onSave({
+    const patch = {
       google_reviews: blank(vals.google_reviews) ? null : Math.max(0, Math.trunc(Number(vals.google_reviews))),
-      phone_conversion_pct: blank(vals.phone_conversion_pct) ? null : Math.max(0, Number(vals.phone_conversion_pct)) / 100,
-      referral_gp_credit: blank(vals.referral_gp_credit) ? 0 : Number(vals.referral_gp_credit),
-    });
+    };
+    // Send the admin-only columns only when an admin is editing them, so a
+    // store's save never trips the column guard on an untouched value.
+    if (canEdit) {
+      patch.phone_conversion_pct = blank(vals.phone_conversion_pct) ? null : Math.max(0, Number(vals.phone_conversion_pct)) / 100;
+      patch.referral_gp_credit = blank(vals.referral_gp_credit) ? 0 : Number(vals.referral_gp_credit);
+    }
+    await onSave(patch);
     setBusy(false);
     onClose();
   };
@@ -122,15 +134,20 @@ function InputsPanel({ model, inputs, canEdit, onSave, onClose }) {
             Five-star Google reviews
           </span>
           <input type="number" min="0" step="1" className={inputCls} placeholder="not entered"
-            value={vals.google_reviews} onChange={set("google_reviews")} disabled={!canEdit} />
+            value={vals.google_reviews} onChange={set("google_reviews")} />
+          <span className="mt-1 block text-[11px] text-content-muted">
+            Counted by the store — enter the month's total.
+          </span>
         </label>
         {model === "A" && (
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-content-secondary">
               Phone conversion (%)
             </span>
-            <input type="number" min="0" step="0.1" className={inputCls} placeholder="not entered"
+            <input type="number" min="0" step="0.1" className={inputCls}
+              placeholder={canEdit ? "not entered" : "admin only"}
               value={vals.phone_conversion_pct} onChange={set("phone_conversion_pct")} disabled={!canEdit} />
+            {!canEdit && <span className="mt-1 block text-[11px] text-content-muted">Set by an admin.</span>}
           </label>
         )}
         {model === "D" && (
@@ -138,21 +155,26 @@ function InputsPanel({ model, inputs, canEdit, onSave, onClose }) {
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-content-secondary">
               Midas referral GP credit ($)
             </span>
-            <input type="number" step="0.01" className={inputCls} placeholder="0.00"
+            <input type="number" step="0.01" className={inputCls}
+              placeholder={canEdit ? "0.00" : "admin only"}
               value={vals.referral_gp_credit} onChange={set("referral_gp_credit")} disabled={!canEdit} />
             <span className="mt-1 block text-[11px] text-content-muted">
-              Bonus math only — never reaches the tic sheet or the Horizon upload.
+              {canEdit
+                ? "Bonus math only — never reaches the tic sheet or the Horizon upload."
+                : "Set by an admin — it adds into the gross profit this bonus is calculated on."}
             </span>
           </label>
         )}
       </div>
-      {canEdit && (
-        <div className="mt-4 flex justify-end gap-2">
-          <GhostBtn onClick={onClose} disabled={busy}>Close</GhostBtn>
-          <PrimaryBtn onClick={save} disabled={busy}>Save</PrimaryBtn>
-        </div>
-      )}
-      {!canEdit && <p className="mt-3 text-xs text-content-muted">Read-only — an admin sets these.</p>}
+      <div className="mt-4 flex items-center justify-end gap-2">
+        {!canEdit && (
+          <p className="mr-auto text-xs text-content-muted">
+            You can log the review count; the other figures are set by an admin.
+          </p>
+        )}
+        <GhostBtn onClick={onClose} disabled={busy}>Close</GhostBtn>
+        <PrimaryBtn onClick={save} disabled={busy}>Save</PrimaryBtn>
+      </div>
     </Card>
   );
 }
