@@ -51,6 +51,23 @@
   --danger-hover: #FF6B63;
   --danger-tint: #3A1416;
   --danger-border: #5C2023;
+
+  /* Shift types — company-wide schedule catalog (shift_types.color_token).
+     Every value clears WCAG AA on all three surfaces; the weakest is
+     shift-slate at 5.52:1 against --surface-overlay. None sits within 40
+     degrees of hue of the accent orange (21) or the warning yellow (42) at
+     usable saturation — the accent means selection and active-nav, and a
+     shift block in that range gets misread. shift-red was rejected for
+     exactly that reason (19 degrees off the accent) and replaced with
+     magenta at 52. Colour is never the only signal: the abbreviation
+     renders alongside it and a legend sits above the grid. */
+  --shift-neutral: #9B9B97; /* Regular Shift — matches an untyped shift */
+  --shift-blue: #58A6FF;    /* PTO   7.28:1 on card */
+  --shift-slate: #8B949E;   /* UTO   5.98:1 — muted, and it earns no hours */
+  --shift-violet: #BC8CFF;  /* Sick  7.30:1 */
+  --shift-teal: #56D4DD;    /* TRN  10.39:1 */
+  --shift-green: #3FB950;   /* HOL   7.24:1 */
+  --shift-magenta: #F778BA; /* OPEN  6.75:1 — the one that should catch the eye */
 }
 
 body {

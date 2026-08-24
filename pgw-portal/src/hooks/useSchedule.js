@@ -8,14 +8,20 @@ import { monthGrid } from "../lib/scheduleMath.js";
 // roster — never pay rates or any pay field. RLS (can_access_location) does all
 // scoping; we never filter by role or hardcode a store list here.
 const SHIFT_SELECT =
-  "id, location_id, employee_id, shift_date, start_time, end_time, notes, employee:employee_id ( id, full_name )";
+  "id, location_id, employee_id, shift_date, start_time, end_time, notes, shift_type_id, employee:employee_id ( id, full_name )";
 
 export function useSchedule(store, year, month) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const locationId = store?.id ?? null;
+  // Replace mode clears a whole month, so it is admin/master only — the one
+  // action here that destroys existing work in bulk. Editing shifts (and
+  // Fill-empty duplication) stays open to anyone can_access_location lets
+  // in, which is the district/regional edit right migration 17 established.
+  const canReplace = role === "admin" || role === "master";
 
   const [shifts, setShifts] = useState([]);
   const [roster, setRoster] = useState([]);
+  const [shiftTypes, setShiftTypes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -27,7 +33,7 @@ export function useSchedule(store, year, month) {
     if (!locationId) return;
     setLoading(true);
     setError(null);
-    const [shiftRes, rosterRes] = await Promise.all([
+    const [shiftRes, rosterRes, typeRes] = await Promise.all([
       supabase
         .from("employee_schedules")
         .select(SHIFT_SELECT)
@@ -42,10 +48,17 @@ export function useSchedule(store, year, month) {
         .eq("location_id", locationId)
         .eq("active", true)
         .order("full_name"),
+      // Company-wide catalog: readable by everyone, so no location filter.
+      supabase
+        .from("shift_types")
+        .select("id, name, abbreviation, color_token, export_argb, counts_toward_hours, is_copyable, sort_order")
+        .eq("active", true)
+        .order("sort_order"),
     ]);
     if (shiftRes.error) setError(shiftRes.error.message);
     else setShifts(shiftRes.data ?? []);
     if (!rosterRes.error) setRoster(rosterRes.data ?? []);
+    if (!typeRes.error) setShiftTypes(typeRes.data ?? []);
     setLoading(false);
   }, [locationId, rangeStart, rangeEnd]);
 
@@ -54,7 +67,7 @@ export function useSchedule(store, year, month) {
   }, [load]);
 
   const addShift = useCallback(
-    async ({ employee_id, shift_date, start_time, end_time, notes }) => {
+    async ({ employee_id, shift_date, start_time, end_time, notes, shift_type_id }) => {
       const { error: err } = await supabase.from("employee_schedules").insert({
         location_id: locationId,
         employee_id,
@@ -62,6 +75,7 @@ export function useSchedule(store, year, month) {
         start_time,
         end_time,
         notes: notes?.trim() || null,
+        shift_type_id: shift_type_id || null,
         created_by: user?.id ?? null,
       });
       if (!err) await load();
@@ -71,7 +85,7 @@ export function useSchedule(store, year, month) {
   );
 
   const updateShift = useCallback(
-    async (id, { employee_id, shift_date, start_time, end_time, notes }) => {
+    async (id, { employee_id, shift_date, start_time, end_time, notes, shift_type_id }) => {
       const { error: err } = await supabase
         .from("employee_schedules")
         .update({
@@ -80,6 +94,7 @@ export function useSchedule(store, year, month) {
           start_time,
           end_time,
           notes: notes?.trim() || null,
+          shift_type_id: shift_type_id || null,
           updated_by: user?.id ?? null,
           updated_at: new Date().toISOString(),
         })
@@ -99,6 +114,39 @@ export function useSchedule(store, year, month) {
     [load]
   );
 
+  // Duplicate a month. Both calls hit the same RPC, which reads one plan
+  // function for preview and commit alike — so the summary the user
+  // confirms cannot drift from what actually runs. Nothing writes until
+  // commit is called; the whole copy is a single transaction server-side.
+  const previewCopy = useCallback(
+    async (sourceMonthIso, targetMonthIso, mode) => {
+      const { data, error: err } = await supabase.rpc("schedule_copy_month", {
+        p_location_id: locationId,
+        p_source_month: sourceMonthIso,
+        p_target_month: targetMonthIso,
+        p_mode: mode,
+        p_commit: false,
+      });
+      return { data, error: err };
+    },
+    [locationId]
+  );
+
+  const commitCopy = useCallback(
+    async (sourceMonthIso, targetMonthIso, mode) => {
+      const { data, error: err } = await supabase.rpc("schedule_copy_month", {
+        p_location_id: locationId,
+        p_source_month: sourceMonthIso,
+        p_target_month: targetMonthIso,
+        p_mode: mode,
+        p_commit: true,
+      });
+      if (!err) await load();
+      return { data, error: err };
+    },
+    [locationId, load]
+  );
+
   // Shifts grouped by date for O(1) day-cell lookup, each list start-time sorted.
   const byDate = useMemo(() => {
     const map = {};
@@ -107,5 +155,16 @@ export function useSchedule(store, year, month) {
     return map;
   }, [shifts]);
 
-  return { grid, byDate, roster, loading, error, reload: load, addShift, updateShift, deleteShift };
+  const typesById = useMemo(() => {
+    const m = {};
+    for (const t of shiftTypes) m[t.id] = t;
+    return m;
+  }, [shiftTypes]);
+
+  return {
+    grid, byDate, roster, loading, error, reload: load,
+    addShift, updateShift, deleteShift,
+    shiftTypes, typesById, canReplace,
+    previewCopy, commitCopy,
+  };
 }

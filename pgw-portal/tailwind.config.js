@@ -50,6 +50,17 @@ export default {
           tint: "var(--danger-tint)",
           border: "var(--danger-border)",
         },
+        // Shift-type catalog colours. Keyed by shift_types.color_token, so a
+        // catalog row names a token here and never a literal hex.
+        shift: {
+          neutral: "var(--shift-neutral)",
+          blue: "var(--shift-blue)",
+          slate: "var(--shift-slate)",
+          violet: "var(--shift-violet)",
+          teal: "var(--shift-teal)",
+          green: "var(--shift-green)",
+          magenta: "var(--shift-magenta)",
+        },
       },
     },
   },
