@@ -182,27 +182,57 @@ export function useTechTracker(locationId, year, month) {
     });
   }, []);
 
+  // How many already-entered days a reassignment would re-stamp. Shown
+  // before the admin confirms, so nothing about history moves unseen.
+  const countRowsFrom = useCallback(async (slotId, effectiveDate) => {
+    const { count, error: e } = await supabase.from("tech_daily")
+      .select("id", { count: "exact", head: true })
+      .eq("tech_slot_id", slotId).gte("work_date", effectiveDate);
+    return e ? 0 : (count ?? 0);
+  }, []);
+
+  // Reassign / clear an OCCUPIED slot. Goes through the RPC so the slot
+  // move and the day re-stamp land in one transaction, and so rows before
+  // the effective date are provably untouched. Returns rows re-stamped.
+  const reassignSlot = useCallback(async (slotId, patch, effectiveDate) => {
+    const { data, error: e } = await supabase.rpc("tech_reassign_slot", {
+      p_slot_id: slotId,
+      p_employee_id: patch.employee_id ?? null,
+      p_label: patch.label ?? null,
+      p_is_manager_or_sa: patch.is_manager_or_sa ?? null,
+      p_effective_date: effectiveDate,
+    });
+    if (e) { setError(e.message); return { error: e }; }
+    await fetchAll();
+    return { error: null, restamped: Number(data) || 0 };
+  }, [fetchAll]);
+
   // Assign / clear a slot (employee, label, manager flag).
+  // Only reaches the insert branch for a slot row that does not exist yet;
+  // an occupied slot goes through reassignSlot so the day rows stay bound
+  // to whoever worked them. Returns { error } so callers can tell.
   const saveSlot = useCallback(async (slotIndex, patch) => {
     const existing = slots.find((s) => s.slot_index === slotIndex);
     if (existing) {
       const { data, error: e } = await supabase.from("tech_slots").update(patch).eq("id", existing.id).select("*, employee:employees(id, full_name, position)").single();
-      if (e) return setError(e.message);
+      if (e) { setError(e.message); return { error: e }; }
       setSlots((prev) => prev.map((s) => (s.id === data.id ? data : s)));
     } else {
       const { data, error: e } = await supabase.from("tech_slots")
         .insert({ location_id: locationId, slot_index: slotIndex, ...patch })
         .select("*, employee:employees(id, full_name, position)").single();
-      if (e) return setError(e.message);
+      if (e) { setError(e.message); return { error: e }; }
       setSlots((prev) => [...prev, data].sort((a, b) => a.slot_index - b.slot_index));
     }
+    setError(null);
+    return { error: null };
   }, [slots, locationId]);
 
   return {
     privileged, loading, error,
     weekStarts, slotViews, storeSummary,
     employees, ratesByEmp,
-    saveDaily, saveOtherPay, saveRate, saveSlot,
+    saveDaily, saveOtherPay, saveRate, saveSlot, reassignSlot, countRowsFrom,
     refetch: fetchAll,
   };
 }
