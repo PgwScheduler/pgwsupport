@@ -82,12 +82,16 @@ export function TechTrackerView({ store }) {
 
       {loading ? (
         <Card className="p-8"><p className="text-sm text-content-muted">Loading {monthLabel(year, month)}…</p></Card>
-      ) : selView ? (
-        <TechMonth key={`${selView.slot.id}-${year}-${month}`}
-          view={selView} privileged={privileged} year={year} month={month} tt={tt} />
       ) : (
-        <EmptySlot idx={selIdx} employees={employees} privileged={privileged}
-          onAssign={(patch) => tt.saveSlot(selIdx, patch)} />
+        <>
+          <SlotManager key={`slot-${selIdx}-${selView?.slot?.id ?? "new"}`}
+            idx={selIdx} slotView={selView} employees={employees}
+            slotViews={slotViews} privileged={privileged} tt={tt} />
+          {selView && (
+            <TechMonth key={`${selView.slot.id}-${year}-${month}`}
+              view={selView} privileged={privileged} year={year} month={month} tt={tt} />
+          )}
+        </>
       )}
 
       <StoreTechSummary slotViews={slotViews} privileged={privileged} slotName={slotName} />
@@ -309,29 +313,122 @@ function StoreTechSummary({ slotViews, privileged, slotName }) {
   );
 }
 
-// ---- Empty slot assignment ----------------------------------------------
-function EmptySlot({ idx, employees, privileged, onAssign }) {
-  const [empId, setEmpId] = useState("");
-  const [label, setLabel] = useState("");
-  if (!privileged) return <Empty icon={Wrench} title={`Slot ${idx} is empty`} hint="Ask a manager to assign a technician to this slot." />;
+// ---- Slot management (admin/master) --------------------------------------
+// Assign a technician, clear the slot, or give an unstaffed slot a label.
+//
+// Reassigning NEVER rewrites who worked a past day. tech_daily carries its
+// own employee_id, stamped when the row was typed, and the effective date
+// below bounds how far back a change reaches — rows before it keep the
+// person who actually worked them, and the count of rows that WOULD move
+// is shown before anything is applied.
+function SlotManager({ idx, slotView, employees, slotViews, privileged, tt }) {
+  const slot = slotView?.slot ?? null;
+  const [empId, setEmpId] = useState(slot?.employee_id ?? "");
+  const [label, setLabel] = useState(slot?.label ?? "");
+  const [effDate, setEffDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+
+  // Who is spoken for elsewhere at this store — the database enforces one
+  // slot per employee, this just says so before the save fails.
+  const takenBy = useMemo(() => {
+    const m = {};
+    for (const sv of slotViews)
+      if (sv.slot.employee_id && sv.slot.id !== slot?.id) m[sv.slot.employee_id] = sv.slot.slot_index;
+    return m;
+  }, [slotViews, slot?.id]);
+
+  React.useEffect(() => {
+    let live = true;
+    if (!slot?.id) { setPreview(null); return; }
+    tt.countRowsFrom(slot.id, effDate).then((n) => { if (live) setPreview(n); });
+    return () => { live = false; };
+  }, [slot?.id, effDate, tt]);
+
+  if (!privileged) {
+    return slot ? null : (
+      <Empty icon={Wrench} title={`Slot ${idx} is empty`}
+        hint="Ask an admin to assign a technician to this slot." />
+    );
+  }
+
+  const current = slot?.employee?.full_name ?? slot?.label ?? "empty";
+  const changed = (empId || null) !== (slot?.employee_id ?? null) ||
+                  (!empId && label.trim() !== (slot?.label ?? ""));
+
+  const apply = async (clearing = false) => {
+    setBusy(true); setNote(null);
+    const patch = clearing
+      ? { employee_id: null, label: null }
+      : empId
+        ? { employee_id: empId, label: null }
+        : { employee_id: null, label: label.trim() || null };
+    // is_manager_or_sa is never inferred from the label — slot 9 keeps the
+    // flag it was created with, and passing null leaves it untouched.
+    let res;
+    if (slot?.id) res = await tt.reassignSlot(slot.id, { ...patch, is_manager_or_sa: null }, effDate);
+    else res = await tt.saveSlot(idx, { ...patch, is_manager_or_sa: idx === 9 });
+    setBusy(false);
+    if (res?.error) return;
+    if (clearing) { setEmpId(""); setLabel(""); }
+    setNote(res && typeof res.restamped === "number"
+      ? res.restamped === 0
+        ? "Saved. No already-entered days were changed."
+        : `Saved. ${res.restamped} day${res.restamped === 1 ? "" : "s"} on or after ${effDate} re-stamped; earlier days untouched.`
+      : "Saved.");
+  };
+
   return (
     <Card className="mb-5 p-4">
-      <p className="mb-3 text-sm font-medium text-content-primary">Assign slot {idx}</p>
+      <div className="mb-3 flex flex-wrap items-baseline gap-2">
+        <p className="text-sm font-medium text-content-primary">Slot {idx}</p>
+        <span className="text-xs text-content-muted">currently {current}</span>
+        {slot?.is_manager_or_sa && (
+          <span className="rounded-full border border-hairline-strong px-2 py-0.5 text-[10px] uppercase tracking-wide text-content-muted">
+            Manager / SA
+          </span>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-56"><Field label="Technician">
-          <select className={inputCls} value={empId} onChange={(e) => setEmpId(e.target.value)}>
+          <select className={inputCls} value={empId}
+            onChange={(e) => { setEmpId(e.target.value); if (e.target.value) setLabel(""); }}>
             <option value="">— none —</option>
-            {employees.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+            {employees.map((e) => (
+              <option key={e.id} value={e.id} disabled={takenBy[e.id] != null}>
+                {e.full_name}{takenBy[e.id] != null ? ` (slot ${takenBy[e.id]})` : ""}
+              </option>
+            ))}
           </select>
         </Field></div>
+
         <div className="w-56"><Field label="…or placeholder label">
-          <input className={inputCls} value={label} placeholder="e.g. MANAGER OR SA" onChange={(e) => setLabel(e.target.value)} />
+          <input className={inputCls} value={label} disabled={!!empId}
+            placeholder={empId ? "—" : "e.g. MANAGER OR SA"}
+            onChange={(e) => setLabel(e.target.value)} />
         </Field></div>
-        <PrimaryBtn disabled={!empId && !label.trim()}
-          onClick={() => onAssign(empId ? { employee_id: empId, label: null } : { employee_id: null, label: label.trim(), is_manager_or_sa: /manager|sa/i.test(label) })}>
-          Assign
-        </PrimaryBtn>
+
+        <div className="w-44"><Field label="Effective from">
+          <input type="date" className={inputCls} value={effDate}
+            onChange={(e) => setEffDate(e.target.value)} />
+        </Field></div>
+
+        <PrimaryBtn disabled={busy || !changed} onClick={() => apply(false)}>Save</PrimaryBtn>
+        {slot && (slot.employee_id || slot.label) && (
+          <GhostBtn disabled={busy} onClick={() => apply(true)}>Clear slot</GhostBtn>
+        )}
       </div>
+
+      {slot?.id && preview != null && (
+        <p className="mt-3 text-xs text-content-muted">
+          {preview === 0
+            ? `No days entered on or after ${effDate} — history is untouched either way.`
+            : `${preview} entered day${preview === 1 ? "" : "s"} on or after ${effDate} would be re-attributed. Days before that date keep whoever worked them.`}
+        </p>
+      )}
+      {note && <p className="mt-2 text-xs text-success">{note}</p>}
     </Card>
   );
 }
