@@ -126,6 +126,45 @@ export function useTechTracker(locationId, year, month) {
     });
   }, [slots, dailyBySlot, otherPayBySlotWeek, ratesByEmp, weekStarts, privileged]);
 
+  // Days with hours typed against a slot that had nobody in it, so no pay
+  // rate resolves and they cost zero. Two shapes count:
+  //
+  //   * the slot holds someone NOW but the day predates the assignment —
+  //     hours entered for a new tech before an admin moved the slot
+  //   * the slot is entirely empty (no employee, no label) and somebody
+  //     typed into it anyway
+  //
+  // A PLACEHOLDER slot (a label and no employee, e.g. 'MANAGER OR SA') is
+  // deliberately unstaffed. Its days are meant to carry no pay, so they are
+  // not flagged — otherwise every store would show a permanent warning it
+  // can never clear. Scope is the month on screen, which is the range the
+  // hook already holds; an older month is only visible by going to it.
+  const unattributed = useMemo(() => {
+    const bySlot = new Map();
+    for (const d of daily) {
+      if (d.employee_id) continue;
+      if (!Number(d.hours_worked) && !Number(d.flag_hours) && !Number(d.labor_sales)) continue;
+      if (d.work_date < monthStart || d.work_date > monthEnd) continue;
+      const slot = slots.find((s) => s.id === d.tech_slot_id);
+      if (!slot) continue;
+      const isPlaceholder = !slot.employee_id && !!slot.label;
+      if (isPlaceholder) continue;
+      if (!bySlot.has(slot.id)) {
+        bySlot.set(slot.id, {
+          slotId: slot.id,
+          slotIndex: slot.slot_index,
+          slotName: slot.employee?.full_name ?? slot.label ?? `Slot ${slot.slot_index}`,
+          assignedNow: !!slot.employee_id,
+          dates: [],
+        });
+      }
+      bySlot.get(slot.id).dates.push(d.work_date);
+    }
+    return [...bySlot.values()]
+      .map((g) => ({ ...g, dates: g.dates.sort() }))
+      .sort((a, b) => a.slotIndex - b.slotIndex);
+  }, [daily, slots, monthStart, monthEnd]);
+
   // Store-level ELR is groupon-blended (Summary R22); other store metrics
   // come from the RPC (labor cost, avg cost/sold hr, shop proficiency).
   const storeSummary = useMemo(() => {
@@ -230,7 +269,7 @@ export function useTechTracker(locationId, year, month) {
 
   return {
     privileged, loading, error,
-    weekStarts, slotViews, storeSummary,
+    weekStarts, slotViews, storeSummary, unattributed,
     employees, ratesByEmp,
     saveDaily, saveOtherPay, saveRate, saveSlot, reassignSlot, countRowsFrom,
     refetch: fetchAll,

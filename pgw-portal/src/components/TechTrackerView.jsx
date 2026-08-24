@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Wrench, Lock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Wrench, Lock, AlertTriangle } from "lucide-react";
 import { Card, SectionHeader, GhostBtn, PrimaryBtn, Empty, Field, inputCls } from "./ui.jsx";
 import { money, pct, numOrDash } from "../lib/format.js";
 import { useTechTracker } from "../hooks/useTechTracker.js";
@@ -20,7 +20,7 @@ export function TechTrackerView({ store }) {
   const [selIdx, setSelIdx] = useState(1);
 
   const tt = useTechTracker(store.id, year, month);
-  const { privileged, loading, error, slotViews, storeSummary, employees } = tt;
+  const { privileged, loading, error, slotViews, storeSummary, employees, unattributed } = tt;
 
   const curYm = now.getFullYear() * 12 + now.getMonth();
   const atCurrentMonth = year * 12 + (month - 1) >= curYm;
@@ -63,6 +63,8 @@ export function TechTrackerView({ store }) {
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
       <StoreStrip s={storeSummary} privileged={privileged} year={year} month={month} />
+
+      <UnattributedNotice groups={unattributed} privileged={privileged} onGoToSlot={setSelIdx} />
 
       {/* Slot selector */}
       <div className="mb-3 flex flex-wrap gap-1.5">
@@ -309,6 +311,55 @@ function StoreTechSummary({ slotViews, privileged, slotName }) {
           })}
         </tbody>
       </table>
+    </Card>
+  );
+}
+
+// ---- Unattributed days ----------------------------------------------------
+// Hours typed against a slot that had nobody in it. They cost zero because no
+// pay rate resolves, which is correct but invisible — so say it out loud.
+// Placeholder slots are excluded upstream: they are meant to be unstaffed.
+const shortDate = (iso) => `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`;
+
+function UnattributedNotice({ groups, privileged, onGoToSlot }) {
+  if (!groups.length) return null;
+  const total = groups.reduce((n, g) => n + g.dates.length, 0);
+  return (
+    <Card className="mb-4 border-warning-border p-4">
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-content-primary">
+            {total} day{total === 1 ? "" : "s"} this month {total === 1 ? "has" : "have"} no technician
+          </p>
+          <p className="mt-0.5 text-xs text-content-muted">
+            Hours were entered against a slot that was empty at the time, so they carry no pay and
+            no labor cost. Everything else about the month is unaffected.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {groups.map((g) => (
+              <li key={g.slotId} className="text-xs text-content-secondary">
+                <button onClick={() => onGoToSlot(g.slotIndex)}
+                  className="font-medium text-content-primary underline decoration-dotted underline-offset-2 hover:text-accent">
+                  Slot {g.slotIndex}
+                  {g.assignedNow ? ` · now ${g.slotName}` : " · still empty"}
+                </button>
+                <span className="ml-2">
+                  {g.dates.slice(0, 8).map(shortDate).join(", ")}
+                  {g.dates.length > 8 ? ` +${g.dates.length - 8} more` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {privileged && (
+            <p className="mt-2 text-xs text-content-muted">
+              {groups.some((g) => g.assignedNow)
+                ? "To attribute them, reassign the slot with an effective date on or before the earliest day listed."
+                : "Assign a technician to the slot, then reassign with an effective date on or before the earliest day listed."}
+            </p>
+          )}
+        </div>
+      </div>
     </Card>
   );
 }
