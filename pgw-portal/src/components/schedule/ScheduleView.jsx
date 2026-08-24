@@ -154,7 +154,11 @@ export function ScheduleView({ store }) {
                               style={t ? { borderLeft: `3px solid ${shiftColorVar(t.color_token)}` } : undefined}
                             >
                               <span className="truncate">
-                                <span className="font-medium">{shortName(s.employee?.full_name)}</span>{" "}
+                                {/* An unassigned shift has nobody to name, so
+                                    it says so rather than showing an em dash. */}
+                                <span className={"font-medium " + (s.employee_id ? "" : "italic text-content-secondary")}>
+                                  {s.employee_id ? shortName(s.employee?.full_name) : "Unassigned"}
+                                </span>{" "}
                                 <span className="text-content-secondary">
                                   {fmtTime(s.start_time)}–{fmtTime(s.end_time)}
                                 </span>

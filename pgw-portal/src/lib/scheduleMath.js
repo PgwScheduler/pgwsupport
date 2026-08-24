@@ -103,9 +103,14 @@ export function weekSummary(weekDates, byDate, typesById = {}) {
       if (t && t.counts_toward_hours === false) continue;
       const h = shiftHours(s.start_time, s.end_time);
       total += h;
-      const cur = perEmp.get(s.employee_id) ?? { id: s.employee_id, name: s.employee?.full_name || "—", hours: 0 };
+      // An unassigned shift has no employee to attribute to. Open shifts
+      // are excluded above (they do not count toward hours), so this only
+      // catches an unassigned shift given some other type; it gets its own
+      // bucket rather than colliding on a null key.
+      const key = s.employee_id ?? "__unassigned__";
+      const cur = perEmp.get(key) ?? { id: key, name: s.employee?.full_name || (s.employee_id ? "—" : "Unassigned"), hours: 0 };
       cur.hours = Math.round((cur.hours + h) * 100) / 100;
-      perEmp.set(s.employee_id, cur);
+      perEmp.set(key, cur);
     }
   }
   const employees = [...perEmp.values()].sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name));

@@ -100,7 +100,7 @@ export async function buildScheduleWorkbook({ store, year, month, byDate, shiftT
       for (const s of dayShifts) {
         const abbr = typesById?.[s.shift_type_id]?.abbreviation?.trim();
         lines.push(
-          `${s.employee?.full_name ?? "—"}  ${fmtTime(s.start_time)}-${fmtTime(s.end_time)}` +
+          `${s.employee_id ? (s.employee?.full_name ?? "—") : "Unassigned"}  ${fmtTime(s.start_time)}-${fmtTime(s.end_time)}` +
           (abbr ? `  [${abbr}]` : "")
         );
       }

@@ -58,11 +58,14 @@ export function DayDetailModal({ store, date, roster, shifts, shiftTypes = [], t
   const submit = async (e) => {
     e.preventDefault();
     setError(null);
-    if (!form.employee_id) return setError("Choose an employee.");
+    // Mirrors employee_schedules_person_or_type: an open shift needs no
+    // employee, but something has to identify it.
+    if (!form.employee_id && !form.shift_type_id)
+      return setError("Choose an employee, or pick a shift type for an open shift.");
     if (!endAfterStart) return setError("End time must be after start time.");
     setBusy(true);
     const payload = {
-      employee_id: form.employee_id,
+      employee_id: form.employee_id || null,
       shift_date: date,
       start_time: form.start_time,
       end_time: form.end_time,
@@ -88,8 +91,12 @@ export function DayDetailModal({ store, date, roster, shifts, shiftTypes = [], t
     if (editingId === id) cancelEdit();
   };
 
+  // An unassigned shift has no person; it says so rather than showing an em
+  // dash, which would read as missing data instead of a deliberate gap.
   const empName = (s) =>
-    s.employee?.full_name || roster.find((r) => r.id === s.employee_id)?.full_name || "—";
+    s.employee_id
+      ? s.employee?.full_name || roster.find((r) => r.id === s.employee_id)?.full_name || "—"
+      : "Unassigned";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4" onClick={onClose}>
@@ -168,7 +175,7 @@ export function DayDetailModal({ store, date, roster, shifts, shiftTypes = [], t
           </p>
           <Field label="Employee">
             <select className={inputCls} value={form.employee_id} onChange={set("employee_id")}>
-              <option value="">Select employee…</option>
+              <option value="">Unassigned — open shift</option>
               {roster.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.full_name || "(unnamed)"}
