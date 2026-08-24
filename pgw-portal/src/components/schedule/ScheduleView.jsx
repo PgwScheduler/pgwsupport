@@ -1,9 +1,12 @@
 import React, { useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Copy, Download } from "lucide-react";
 import { useSchedule } from "../../hooks/useSchedule.js";
 import { SectionHeader, Card, GhostBtn, T } from "../ui.jsx";
 import { inMonth, weekSummary, fmtTime, fmtHours, shortName, todayStr } from "../../lib/scheduleMath.js";
+import { shiftColorVar } from "../../lib/shiftTypes.js";
+import { downloadScheduleWorkbook } from "../../lib/scheduleWorkbook.js";
 import { DayDetailModal } from "./DayDetailModal.jsx";
+import { DuplicateMonthModal } from "./DuplicateMonthModal.jsx";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAX_VISIBLE = 3; // shifts shown per day cell before "+N more"
@@ -14,8 +17,12 @@ export function ScheduleView({ store }) {
   const [month, setMonth] = useState(now.getMonth()); // 0-based
   const [openDay, setOpenDay] = useState(null);
   const [expandedWeek, setExpandedWeek] = useState(null);
+  const [dupOpen, setDupOpen] = useState(false);
 
-  const { grid, byDate, roster, loading, error, addShift, updateShift, deleteShift } = useSchedule(store, year, month);
+  const {
+    grid, byDate, roster, loading, error, addShift, updateShift, deleteShift,
+    shiftTypes, typesById, canReplace, previewCopy, commitCopy,
+  } = useSchedule(store, year, month);
 
   const monthInputValue = `${year}-${String(month + 1).padStart(2, "0")}`;
   const today = todayStr();
@@ -63,11 +70,33 @@ export function ScheduleView({ store }) {
             <GhostBtn onClick={() => shiftMonth(1)} aria-label="Next month">
               <ChevronRight className="h-4 w-4" />
             </GhostBtn>
+            <GhostBtn onClick={() => setDupOpen(true)}>
+              <Copy className="mr-1 inline h-3.5 w-3.5" />Duplicate month
+            </GhostBtn>
+            <GhostBtn onClick={() => downloadScheduleWorkbook({ store, year, month, byDate, shiftTypes, typesById })}>
+              <Download className="mr-1 inline h-3.5 w-3.5" />Excel
+            </GhostBtn>
           </div>
         }
       />
 
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
+
+      {/* Legend — colour is never the only signal, so the abbreviation that
+          appears on each shift block can always be resolved here. */}
+      {shiftTypes.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-hairline bg-surface-card px-3 py-2">
+          {shiftTypes.filter((t) => (t.abbreviation || "").trim()).map((t) => (
+            <span key={t.id} className="flex items-center gap-1.5 text-[11px] text-content-secondary">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm"
+                style={{ backgroundColor: shiftColorVar(t.color_token) }} />
+              <span className="font-semibold text-content-primary">{t.abbreviation}</span>
+              {t.name}
+              {!t.counts_toward_hours && <span className="text-content-muted">· not in hours</span>}
+            </span>
+          ))}
+        </div>
+      )}
 
       <Card className="overflow-hidden">
         <div className="grid grid-cols-8 border-b border-hairline bg-surface-overlay text-[11px] font-semibold uppercase tracking-wide text-content-secondary">
@@ -81,7 +110,7 @@ export function ScheduleView({ store }) {
 
         <div className="grid grid-cols-8">
           {grid.map((week, wi) => {
-            const summary = weekSummary(week, byDate);
+            const summary = weekSummary(week, byDate, typesById);
             const expanded = expandedWeek === wi;
             return (
               <React.Fragment key={week[0]}>
@@ -112,17 +141,33 @@ export function ScheduleView({ store }) {
                         </span>
                       </div>
                       <div className="space-y-0.5">
-                        {dayShifts.slice(0, MAX_VISIBLE).map((s) => (
-                          <div
-                            key={s.id}
-                            className="truncate rounded bg-surface-overlay px-1 py-0.5 text-[11px] leading-tight text-content-primary"
-                          >
-                            <span className="font-medium">{shortName(s.employee?.full_name)}</span>{" "}
-                            <span className="text-content-secondary">
-                              {fmtTime(s.start_time)}–{fmtTime(s.end_time)}
-                            </span>
-                          </div>
-                        ))}
+                        {dayShifts.slice(0, MAX_VISIBLE).map((s) => {
+                          // An untyped shift renders exactly as it always has:
+                          // no colour bar, no abbreviation, same markup.
+                          const t = s.shift_type_id ? typesById[s.shift_type_id] : null;
+                          const abbr = t?.abbreviation?.trim();
+                          return (
+                            <div
+                              key={s.id}
+                              title={t ? t.name : undefined}
+                              className="flex items-center gap-1 truncate rounded bg-surface-overlay px-1 py-0.5 text-[11px] leading-tight text-content-primary"
+                              style={t ? { borderLeft: `3px solid ${shiftColorVar(t.color_token)}` } : undefined}
+                            >
+                              <span className="truncate">
+                                <span className="font-medium">{shortName(s.employee?.full_name)}</span>{" "}
+                                <span className="text-content-secondary">
+                                  {fmtTime(s.start_time)}–{fmtTime(s.end_time)}
+                                </span>
+                              </span>
+                              {abbr && (
+                                <span className="ml-auto shrink-0 font-bold"
+                                  style={{ color: shiftColorVar(t.color_token) }}>
+                                  {abbr}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
                         {dayShifts.length > MAX_VISIBLE && (
                           <div className="px-1 text-[11px] font-medium" style={{ color: T.accentSoftText }}>
                             +{dayShifts.length - MAX_VISIBLE} more
@@ -184,10 +229,24 @@ export function ScheduleView({ store }) {
           date={openDay}
           roster={roster}
           shifts={byDate[openDay] ?? []}
+          shiftTypes={shiftTypes}
+          typesById={typesById}
           onClose={() => setOpenDay(null)}
           addShift={addShift}
           updateShift={updateShift}
           deleteShift={deleteShift}
+        />
+      )}
+
+      {dupOpen && (
+        <DuplicateMonthModal
+          store={store}
+          year={year}
+          month={month}
+          canReplace={canReplace}
+          previewCopy={previewCopy}
+          commitCopy={commitCopy}
+          onClose={() => setDupOpen(false)}
         />
       )}
     </div>

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { X, Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { Card, Field, PrimaryBtn, GhostBtn, inputCls } from "../ui.jsx";
 import { fmtTime, fmtHours, shiftHours, toMinutes, overlaps } from "../../lib/scheduleMath.js";
+import { shiftColorVar } from "../../lib/shiftTypes.js";
 
 const prettyDate = (date) =>
   new Date(date + "T00:00:00").toLocaleDateString(undefined, {
@@ -11,12 +12,12 @@ const prettyDate = (date) =>
     year: "numeric",
   });
 
-const blankForm = { employee_id: "", start_time: "09:00", end_time: "17:00", notes: "" };
+const blankForm = { employee_id: "", start_time: "09:00", end_time: "17:00", notes: "", shift_type_id: "" };
 
 // Day detail: lists the day's shifts with edit/delete, plus an add/edit form.
 // Validates end > start in the UI (the db check enforces it too) and warns —
 // without blocking — on an overlap with the same employee's other shifts.
-export function DayDetailModal({ store, date, roster, shifts, onClose, addShift, updateShift, deleteShift }) {
+export function DayDetailModal({ store, date, roster, shifts, shiftTypes = [], typesById = {}, onClose, addShift, updateShift, deleteShift }) {
   const [form, setForm] = useState(blankForm);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState(null);
@@ -43,6 +44,7 @@ export function DayDetailModal({ store, date, roster, shifts, onClose, addShift,
       start_time: String(s.start_time).slice(0, 5),
       end_time: String(s.end_time).slice(0, 5),
       notes: s.notes ?? "",
+      shift_type_id: s.shift_type_id ?? "",
     });
     setError(null);
   };
@@ -65,6 +67,7 @@ export function DayDetailModal({ store, date, roster, shifts, onClose, addShift,
       start_time: form.start_time,
       end_time: form.end_time,
       notes: form.notes,
+      shift_type_id: form.shift_type_id || null,
     };
     const { error: err } = editingId ? await updateShift(editingId, payload) : await addShift(payload);
     setBusy(false);
@@ -116,9 +119,24 @@ export function DayDetailModal({ store, date, roster, shifts, onClose, addShift,
                 }
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-content-primary">{empName(s)}</p>
+                  <p className="flex items-center gap-1.5 truncate text-sm font-medium text-content-primary">
+                    {empName(s)}
+                    {s.shift_type_id && typesById[s.shift_type_id] && (
+                      <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold"
+                        style={{
+                          color: shiftColorVar(typesById[s.shift_type_id].color_token),
+                          border: `1px solid ${shiftColorVar(typesById[s.shift_type_id].color_token)}`,
+                        }}
+                        title={typesById[s.shift_type_id].name}>
+                        {typesById[s.shift_type_id].abbreviation || typesById[s.shift_type_id].name}
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-content-secondary">
                     {fmtTime(s.start_time)}–{fmtTime(s.end_time)} · {fmtHours(shiftHours(s.start_time, s.end_time))} h
+                    {s.shift_type_id && typesById[s.shift_type_id]?.counts_toward_hours === false && (
+                      <span className="text-content-muted"> (not in weekly total)</span>
+                    )}
                     {s.notes ? ` · ${s.notes}` : ""}
                   </p>
                 </div>
@@ -166,8 +184,26 @@ export function DayDetailModal({ store, date, roster, shifts, onClose, addShift,
               <input type="time" className={inputCls} value={form.end_time} onChange={set("end_time")} />
             </Field>
           </div>
+          <Field label="Shift type">
+            {/* Blank is an ordinary worked shift — the pre-existing behaviour,
+                and what every shift created before types was one of. */}
+            <select className={inputCls} value={form.shift_type_id} onChange={set("shift_type_id")}>
+              <option value="">Regular shift (no type)</option>
+              {shiftTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.abbreviation ? `${t.abbreviation} · ` : ""}{t.name}
+                  {t.counts_toward_hours ? "" : " — not counted in hours"}
+                </option>
+              ))}
+            </select>
+          </Field>
           {endAfterStart && (
-            <p className="text-xs text-content-muted">{fmtHours(shiftHours(form.start_time, form.end_time))} scheduled hours</p>
+            <p className="text-xs text-content-muted">
+              {fmtHours(shiftHours(form.start_time, form.end_time))} scheduled hours
+              {form.shift_type_id && typesById[form.shift_type_id]?.counts_toward_hours === false && (
+                <span className="text-warning"> · not added to the weekly total</span>
+              )}
+            </p>
           )}
           <Field label="Note (optional)">
             <input className={inputCls} value={form.notes} onChange={set("notes")} placeholder="e.g. covering front" />

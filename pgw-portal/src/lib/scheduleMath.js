@@ -83,11 +83,24 @@ export const overlaps = (aStart, aEnd, bStart, bEnd) =>
 // Total scheduled hours for a Mon–Sun week plus a per-employee breakdown.
 // byDate: { "YYYY-MM-DD": [shift, ...] }. Sums the full week regardless of
 // which days fall outside the displayed month.
-export function weekSummary(weekDates, byDate) {
+//
+// `typesById` is the shift-type catalog keyed by id. A shift whose type has
+// counts_toward_hours = false is excluded from BOTH the week total and the
+// per-employee rows — unpaid time off is not hours, and an open/unassigned
+// shift is a staffing placeholder rather than anybody's time. An untyped
+// shift always counts, which is the behaviour that existed before types.
+//
+// NOTE for anything downstream: PTO counts here because it is paid
+// scheduled labor, but it is not WORKED time. If this total is ever used to
+// forecast overtime, PTO has to come out of that specific calculation.
+// Flagged on screen for BDC rather than decided here.
+export function weekSummary(weekDates, byDate, typesById = {}) {
   const perEmp = new Map(); // employee_id -> { id, name, hours }
   let total = 0;
   for (const date of weekDates) {
     for (const s of byDate[date] ?? []) {
+      const t = s.shift_type_id ? typesById[s.shift_type_id] : null;
+      if (t && t.counts_toward_hours === false) continue;
       const h = shiftHours(s.start_time, s.end_time);
       total += h;
       const cur = perEmp.get(s.employee_id) ?? { id: s.employee_id, name: s.employee?.full_name || "—", hours: 0 };
