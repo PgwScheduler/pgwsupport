@@ -49,6 +49,152 @@ org hierarchy, roles, ground rules). This file just tracks what's been
 
 30. `pgw_open_shifts_31.sql` — **open shifts need no person.** Migration 30 added an "Open / Unassigned" type to a table whose `employee_id` was NOT NULL, so an open shift had to be parked against a real person. Dropping the constraint is one line; **three things break with it and are fixed here.** (1) The copy plan would have skipped every open shift — its verdict reads `when e.id is null or e.active = false then 'inactive'`, and a null `employee_id` makes the left join produce a null `e.id`, so every open shift would have been reported as *"skipped — employee no longer active"* with a null in the names array. The inactive test now applies only when an employee is actually named. (2) Fill-empty would have duplicated them on every run, because the collision test is `x.employee_id = s.employee_id` and `NULL = NULL` is never true — re-running a fill copy is a no-op today and that property would have died silently. Unassigned shifts now collide on `(date, start_time)`. (3) `employee_schedules_uniq` stops constraining unassigned rows, since Postgres treats NULLs as distinct — **left as-is deliberately**, because "we need three people Saturday morning" is expressed as three identical open shifts; duplication-on-copy is handled by (2). Adds `employee_schedules_person_or_type` (`employee_id is not null or shift_type_id is not null`) so a row can never be a blank block with no name and nothing to label it. `employee_id` keeps ON DELETE CASCADE — deleting an employee still removes their shifts rather than turning them into open ones, which is a separate decision.
 
+## IN FLIGHT — Task 8: Payroll daily entry + Sunday week + tech hours
+
+**Status as of 2026-08-26: migration 32 is WRITTEN BUT NOT RUN.** Everything
+below is decided and agreed with BDC; nothing has touched the database yet.
+
+`pgw_payroll_daily_sunday_32.sql` (923 lines, 12 sections) is ready to paste
+into the Supabase SQL Editor. **Next action: the user runs it**, then says so.
+If PostgREST reports it cannot find `public.payroll_daily`, that is the usual
+schema-cache lag — `notify pgrst, 'reload schema';`.
+
+**After it runs, the frontend is still entirely unbuilt.** None of the Task 8
+Part 5 confirmations can be checked until it exists:
+
+- seven day columns, **Sunday first**, on the Payroll grid (today's grid is one
+  weekly total; `weekUtils.js` `DAYS` has only `mon`…`sat` and must gain Sunday)
+- technician rows **read-only**, sourced from `tech_daily`, with a note saying
+  where the hours come from and a link through to the Tech Tracker
+- a week-to-date payroll-to-sales widget on the Dashboard, showing the wage
+  components broken out, the technicians-included flag, the missing-store-manager
+  warning, and the unattributed-days banner
+- `lib/payrollMath.js` `computePayRow()` must switch its salaried test from
+  `position === 'manager'` to `is_store_manager`, mirroring section 10
+- `useDashboard.js` / `DashboardView.jsx` / `HoursView.jsx` /
+  `SpeedeeHoursView.jsx` all still call `thisWeekStart()` (Monday-based)
+- SpeeDee's `salesExpectation` is hours × role rate, computed client-side, so it
+  must read the new weekly hours too — the RPC behind it needed no change
+
+### What migration 32 does
+
+The pay week moves Monday → **Sunday**, hours are captured **daily**, and a
+technician's hours are **read from the Tech Tracker, never re-typed**. The three
+only work together: Sunday alignment is what lets payroll and the tech tracker
+share a week without translation, and daily capture is what makes one-entry-per-
+person-per-day enforceable.
+
+- **Cutover `2026-08-30`** (a Sunday), company-wide, stored in a new single-row
+  `payroll_config` table — nothing hardcodes it, every rule that depends on it is
+  a trigger reading it (a CHECK cannot reference a table). Weeks before it read
+  the old weekly rows; weeks from it read `payroll_daily`. **Nothing is
+  backfilled** — daily detail cannot be recovered from a weekly total.
+- `payroll_config.include_technicians` (default true) makes the brief's "one-line
+  change to exclude technicians" a one-*field* change with no deploy.
+- **`employees.is_store_manager`** + a one-per-location partial unique index, and
+  a CHECK that only a `position = 'manager'` row can carry it.
+- **Test rows cleared** (approved): the 3 `timesheet_entries` at #5254 for week
+  `2026-07-13` plus extensions, and the 1 `store_week_sales` row. `tech_daily` is
+  untouched — Millwood's July is real.
+- **Both weekly tables flip together.** `timesheet_entries` and `store_week_sales`
+  take `check (dow in (0,1))` plus a shared trigger: Sunday from the cutover,
+  Monday before it. A straight flip to `dow = 0` is impossible while any Monday
+  row exists. They must flip on the same date — `store_week_sales` is the SpeeDee
+  percentage's denominator.
+- **Legacy weekly hours frozen** — `clock_hours`/`clock_hours_other` are immutable
+  on pre-cutover rows (master keeps an escape hatch) and must be zero on
+  post-cutover rows, where they would be counted by nothing and silently lost.
+- **`payroll_daily`** — `unique (employee_id, work_date)`, plus `hours_worked_other`
+  (keeps the existing "clocked at another store" split rather than widening the
+  key) and `hours_turned` (uniform daily grain; never written for a technician).
+  Rows cannot be backdated before the cutover, or a week would exist in two
+  grains at once.
+- **One entry per person per day, enforced both directions.** A unique index
+  cannot span two tables, so a trigger on each side refuses a collision by name
+  rather than letting either screen delete the other's typed hours. Placeholder
+  slots (`tech_daily.employee_id` null) are exempt — they belong to nobody. The
+  `tech_daily` guard is an **AFTER** trigger on purpose: `tech_daily_stamp_employee`
+  (migration 29) is a BEFORE trigger filling `employee_id`, and a BEFORE guard
+  would race it on name order and could read a null.
+- **`payroll_day_hours(loc, from, to)`** is the single resolver every weekly figure
+  reads — tech if a `tech_daily` row exists for that person and day, else
+  `payroll_daily`. Because resolution is per (person, **day**), an employee who is
+  a technician for part of a period needs no special case, and still gets **one**
+  40-hour threshold across the week.
+- **`payroll_week_hours(loc, wk)`** computes overtime **weekly, once**, on the sum
+  of the seven days, and resolves its source across the cutover. There is no daily
+  overtime anywhere in the file.
+- **`payroll_pct_summary` and `flat_flags_for_week` rewritten** — hours resolve
+  through `payroll_week_hours`, and both now drive off the **roster** rather than
+  off `timesheet_entries`, because post-cutover an employee can have daily hours
+  and no weekly row at all.
+- **`payroll_to_sales_wtd(loc, wk, as_of)`** — SECURITY DEFINER, re-checks
+  `can_access_location`, reads the master-only rate/pay tables and `_tech_days`
+  internally. Returns window bounds, both wage components, gross sales, the ratio,
+  the technicians-included flag, `missing_store_manager`, and `unattributed_days`.
+
+### Decisions behind it, so they are not re-litigated
+
+- **Salary keys off `is_store_manager`, not `position = 'manager'`.** The old rule
+  paid *every* `manager` row `manager_salary` and never computed hourly or OT for
+  them. BDC's rule is that only the GM is salaried and excluded and assistants stay
+  in the metric — which is only coherent if assistants are hourly. An assistant
+  manager now needs `employee_pay_rates.hourly_rate` set; their `manager_salary` is
+  ignored. Exactly one `manager` row exists company-wide (#5254 "Tom Cruise", test
+  data), so nothing real moves today.
+- **Numerator** = hourly wages, excluding the store manager entirely (not their
+  wages, not their hours, not their days in the window bound). `timesheet_pay.bonus`
+  **and** `incentives` both come out — never added, not added then subtracted.
+  Technicians are **in**, at the Tech Tracker pay engine's figure, and
+  `tech_weekly.other_pay` **stays in** per BDC (it is entered at week close, so
+  mid-week it is normally zero).
+- **Denominator** = the tic sheet's own Sales, `ticSheetMath.daySales()`: tech
+  `labor_sales` + parts + tires + supplies + discounts. Groupon excluded
+  (migration 25); discounts signed as entered and added algebraically.
+- **The window is the intersection**, Sunday through the last day *both* sides have
+  data for. A store entering the tic sheet nightly but payroll on Friday would
+  otherwise read a flattering number all week and jump on Friday.
+- **Sunday is a closed day.** `derived_days_open()` counts Mon–Sat, and 83 real
+  tech days across July contain **zero** Sundays. The realignment is still correct
+  — it is what lets the week key join across screens — but no hours will move
+  between weeks and the Sunday column will normally sit empty. The boundary is
+  clean: the last Monday week (2026-08-24) covers Aug 24–29, the first Sunday week
+  opens Aug 30, and no worked day changes week.
+- **The pay-visibility wall is softened, knowingly.** Gross sales are already
+  store-visible on the tic sheet, so percentage × sales *is* the wage total
+  exactly. Hiding the numerator would be theatre; BDC accepted the trade, and the
+  widget shows the components deliberately.
+- `payroll_speedee_summary` deliberately **not** changed — it sums *entered*
+  paychecks against `store_week_sales` and never reads hours.
+
+### Two review catches worth keeping
+
+- **`LEAST` ignores nulls.** The window end was `least(hours_thru, sales_thru)`,
+  so a store with hours but no tic sheet would have gotten a window running to the
+  last hours day — a full week of wages over nothing. Now an explicit null check.
+- Migrations 14 and 16 both name a CTE column `actual_sales` alongside the `OUT`
+  parameter of the same name in `payroll_pct_summary`. In plpgsql an OUT parameter
+  is a variable, and that pairing is a latent **42702** ambiguity. It has not fired
+  in production, but section 10 renames its CTE column rather than copy it.
+
+### The live data this was sized against (read via master session, 2026-08-26)
+
+- **9 employees across 3 of 36 stores.** #3303 Millwood 5 techs (the July seed),
+  #5254 Gervais St manager/front/tech (test), #2321 Beach Blvd 1 tech. Company-wide:
+  1 manager, 1 front, 6 active techs, 1 inactive. **No SpeeDee store has any
+  employees**, so SpeeDee payroll is entirely unexercised.
+- **`timesheet_entries`: 3 rows**, one week (`2026-07-13`, a Monday), one store,
+  157.12 hours, $0 actual sales — all now deleted by section 3. `timesheet_speedee`:
+  0 rows. `store_week_sales`: 1 row, same week, also deleted.
+- **`tech_daily`: 83 rows**, Millwood only, 2026-07-01 → 07-31, **0 on a Sunday**,
+  2 rows with a null `employee_id` (placeholder slots — they carry hours, resolve to
+  no rate, and cost $0).
+- **Consequence worth watching:** the store-manager exclusion ships *inert*. Nobody
+  is flagged, because no real rosters exist. The risk is not this migration — it is
+  whoever enters 36 rosters later typing GMs as `position = 'manager'` and leaving
+  the flag false, which would put a salaried GM's salary in every store's numerator.
+  That is what the `missing_store_manager` warning on the widget is for.
+
 ## Frontend build order
 
 1. **App shell** — Vite/React/Tailwind scaffold, real Supabase email/password auth (`AuthProvider.jsx`), role-scoped store picker, sidebar/header/breadcrumb (`Shell.jsx`). "Preview as" role switcher removed — role comes from the logged-in profile.
