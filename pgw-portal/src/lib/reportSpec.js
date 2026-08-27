@@ -1,7 +1,7 @@
 // =====================================================================
 // The Report Builder's client-side vocabulary: how a measure is
-// rendered, how the four presets fill the builder in, and how the store
-// tree is assembled for the picker.
+// rendered, how the five leadership reports fill the builder in, and how
+// the store tree is assembled for the picker.
 //
 // WHAT IS DELIBERATELY NOT HERE
 //   No measure list. The catalogue comes from report_measure_catalog()
@@ -80,6 +80,12 @@ export function formatCell(kind, v) {
       return n === 0 ? "-" : numOrDash(n, 2);
     case "int":
       return n === 0 ? "-" : numOrDash(n, 0);
+    // A plain quantity that is not money and not a whole count — cars
+    // per store, tyres per day. Two decimals, because 10.56 tyres a day
+    // rounded to 11 is the integer-division bug migration 33 caught,
+    // made visible instead of computed.
+    case "num":
+      return n === 0 ? "-" : numOrDash(n, 2);
     default:
       return String(v);
   }
@@ -95,6 +101,7 @@ export function numFmtFor(kind) {
     case "ratio":
       return PERCENT_FMT;
     case "hours":
+    case "num":
       return HOURS_FMT;
     case "int":
       return QTY_FMT;
@@ -155,61 +162,131 @@ export const storesInRegion = (stores, regionId) =>
 export const storeLabel = (s) => `#${s.store_number} · ${s.name}`;
 
 // ---------------------------------------------------------------------
-// PRESETS
+// THE FIVE REPORTS
 //
-// A blank builder is a builder nobody uses. Each of these fills all four
-// choices and is then editable — nothing here is a mode, it is a
-// starting point.
+// These are not guesses. They are the five reports leadership already
+// circulates, reproduced from samples, and each fills every control:
+// range, stores, measures, grouping AND sort. The sort is part of the
+// report, not a preference — "who sold the most tyres yesterday" is a
+// different question from "the stores, alphabetically".
 //
-// FLAGGED for BDC: these four are a reasonable guess, not a researched
-// answer. The question to ask is which three or four reports his boss
-// asks for today; replacing these is editing this array and nothing
-// else. `groups` names catalogue groups rather than measure keys, so a
-// preset stays correct as measures are added.
+// Two of them put columns from two windows side by side, which is what
+// `altRange` / `altMeasures` are for. The Market Review is month-to-date
+// with one YESTERDAY column; the tyre report is yesterday with one
+// MONTH-TO-DATE column. The caller names which measures use the other
+// window, so nothing about a column's window is implicit.
+//
+// `requiresPriorYear` marks the columns that cannot be computed until
+// prior_year_actuals is loaded. Those render as UNAVAILABLE — never as
+// zero, and never as a percentage against nothing, which would read as
+// infinite improvement for every store in the company.
 //
 // stores:
+//   'all'       every store the user can access
 //   'current'   just the store in the header picker
 //   'district'  every accessible store in that store's district
 //   'keep'      leave the current selection alone
 // ---------------------------------------------------------------------
 export const PRESETS = [
   {
-    key: "store_month",
-    label: "Store month summary",
-    hint: "One store · month to date · every summary and gross-profit measure · by day",
+    key: "market_review",
+    label: "Market Review",
+    hint: "By market · month to date with yesterday's GP · plus a PGW total row",
     range: "mtd",
-    stores: "current",
-    groupBy: "day",
-    groups: ["Tic sheet — summary", "Gross profit"],
+    altRange: "yesterday",
+    stores: "all",
+    groupBy: "district",
+    measures: ["cars_per_store", "cars_per_store_vs_py", "gp_per_store", "pct_of_budget", "projected_gp"],
+    // "Daily GP $ Yesterday" — the one column on the other window.
+    altMeasures: ["gp_per_store"],
+    sort: { measure: "projected_gp", dir: "desc" },
+    requiresPriorYear: ["cars_per_store_vs_py"],
+    // The PGW row mixes averages and totals, exactly as the sample does:
+    // cars-per-store and GP-per-store divide by the store count at
+    // whatever level they are computed, so the total row is a company
+    // average, while projected GP simply sums. That falls out of the
+    // GROUPING SETS totals rather than being special-cased.
+    note: "Cars per store and GP per store are averages at every level; projected GP is a total.",
   },
   {
-    key: "district_comparison",
-    label: "District comparison",
-    hint: "Every store in the district · month to date · sales, GP, ROs, capture rate · by store",
-    range: "mtd",
-    stores: "district",
+    key: "gp_yesterday",
+    label: "Total GP $ Yesterday",
+    hint: "By store · yesterday · sorted by total GP",
+    range: "yesterday",
+    stores: "all",
     groupBy: "store",
-    measures: ["sales", "gross_profit", "gross_profit_pct", "ro_count", "capture_rate"],
+    measures: ["ro_count", "ave_estimate", "sales", "gross_profit", "gross_profit_pct"],
+    sort: { measure: "gross_profit", dir: "desc" },
+    note: "Est / Car is total potential ÷ repair orders, not sales ÷ cars. It renders blank where no declined sales were recorded, which is why the SpeeDee stores are blank.",
   },
   {
-    key: "category_performance",
-    label: "Category performance",
-    hint: "Selected stores · month to date · every category with its % of cars · by store",
-    range: "mtd",
-    stores: "keep",
+    key: "tires_yesterday",
+    label: "Tires Sold Yesterday",
+    hint: "By store · yesterday with MTD tires per day · sorted by tires",
+    range: "yesterday",
+    altRange: "mtd",
+    stores: "all",
     groupBy: "store",
-    groups: ["Tic sheet — categories (units)", "Tic sheet — categories (% of cars)"],
+    measures: ["cat_units_kpi_su_tires", "cat_units_kpi_su_wheel_alignments", "tires_per_day"],
+    altMeasures: ["tires_per_day"],
+    sort: { measure: "cat_units_kpi_su_tires", dir: "desc" },
+    note: "Tires per day divides by days WITH DATA, never calendar days — the same rule as the dashboard widget.",
   },
   {
-    key: "technician_productivity",
-    label: "Technician productivity",
-    hint: "Selected stores · month to date · hours, flag, labor sales, ELR, proficiency · by store",
+    key: "sales_vs_last_year",
+    label: "Sales Projection vs Last Year",
+    hint: "By store · month to date · sorted by % improvement",
     range: "mtd",
-    stores: "keep",
+    stores: "all",
     groupBy: "store",
-    measures: ["tech_hours_worked", "tech_flag_hours", "tech_labor_sales", "tech_elr", "tech_proficiency"],
+    measures: ["projected_sales", "sales_vs_py", "sales_vs_py_pct"],
+    sort: { measure: "sales_vs_py_pct", dir: "desc" },
+    requiresPriorYear: ["sales_vs_py", "sales_vs_py_pct"],
+    note: "Sorted by percentage, not by dollars — the report is about who is improving most, not who is largest.",
+  },
+  {
+    key: "month_gp",
+    label: "Month Total GP $",
+    hint: "By store · month to date · budget and every tier · sorted by GP",
+    range: "mtd",
+    stores: "all",
+    groupBy: "store",
+    measures: [
+      "gross_profit", "gp_budget", "gp_budget_remaining", "gp_budget_per_day",
+      "gold_threshold", "gold_remaining", "gold_per_day",
+      "silver_threshold", "silver_remaining", "silver_per_day",
+      "bronze_threshold", "bronze_remaining", "bronze_per_day",
+    ],
+    sort: { measure: "gross_profit", dir: "desc" },
+    note: "A tier already cleared reads BOOM! and its per-day cell blanks. The nine Model B stores show no Bronze because Model B is a two-tier plan — those cells are correctly empty, not missing.",
   },
 ];
+
+// Measures that cannot be answered until prior_year_actuals is loaded.
+export const PRIOR_YEAR_MEASURES = [
+  "py_sales", "py_gross_profit", "py_cars",
+  "sales_vs_py", "sales_vs_py_pct", "cars_per_store_vs_py",
+];
+
+export const needsPriorYear = (measures = []) =>
+  measures.some((k) => PRIOR_YEAR_MEASURES.includes(k));
+
+// Monthly figures repeat on every row when a report is grouped by a
+// period shorter than a month — a store's August budget is the same
+// number on all 31 August days. The builder says so rather than letting
+// someone read 31 budgets.
+export const MONTHLY_MEASURES = [
+  "days_open", "days_left", "gp_budget", "pct_of_budget",
+  "gp_budget_remaining", "gp_budget_per_day",
+  "gold_threshold", "gold_remaining", "gold_per_day",
+  "silver_threshold", "silver_remaining", "silver_per_day",
+  "bronze_threshold", "bronze_remaining", "bronze_per_day",
+  "py_sales", "py_gross_profit", "py_cars",
+];
+
+export const hasRepeatedMonthly = (measures = [], groupBy = "") =>
+  (groupBy === "day" || groupBy === "week") &&
+  measures.some((k) => MONTHLY_MEASURES.includes(k));
 
 // Resolve a preset's measure selection against the live catalogue. Named
 // groups expand to every measure in them, in catalogue order; explicit
@@ -229,6 +306,12 @@ export function resolvePresetMeasures(preset, catalog = []) {
 // Resolve a preset's store directive. Returns an array of store ids.
 export function resolvePresetStores(preset, { stores = [], currentStore = null, selected = [] } = {}) {
   switch (preset.stores) {
+    // Every store the user can reach. The five leadership reports are
+    // company-wide by nature — a Market Review of one market is not a
+    // Market Review — and can_access_location() has already decided what
+    // "every" means for whoever is asking.
+    case "all":
+      return stores.map((s) => s.id);
     case "current":
       return currentStore ? [currentStore.id] : [];
     case "district": {

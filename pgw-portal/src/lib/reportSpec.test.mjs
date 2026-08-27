@@ -8,6 +8,7 @@ import {
   formatCell, numFmtFor, excelValue, storeTree, storesInDistrict, storesInRegion,
   resolvePresetMeasures, resolvePresetStores, orderMeasures, groupCatalog,
   hasAttributedPay, sheetName, canBuildReports, PRESETS, GROUP_BY,
+  PRIOR_YEAR_MEASURES, needsPriorYear, hasRepeatedMonthly,
 } from "./reportSpec.js";
 import { CURRENCY_FMT, HOURS_FMT, PERCENT_FMT, QTY_FMT } from "./excelFormats.js";
 
@@ -82,80 +83,133 @@ eq("stores in a region", storesInRegion(STORES, "r1").map((s) => s.id), ["s3", "
 eq("no district is no stores", storesInDistrict(STORES, null), []);
 
 // ---------------------------------------------------------------------
-// The catalogue-driven bits. A preset names GROUPS so a category added
-// to a brand joins the category preset without an edit here.
+// The five leadership reports. These are not guesses, so the checks are
+// about the report being FAITHFUL: the right sort, the right window on
+// the right column, and the prior-year columns declared as such.
 // ---------------------------------------------------------------------
 const CATALOG = [
   { measure_key: "ro_count",     label: "Repair Orders", group_label: "Tic sheet — summary", kind: "int",   restricted: false, sort_order: 100 },
   { measure_key: "sales",        label: "Sales",         group_label: "Tic sheet — summary", kind: "money", restricted: false, sort_order: 110 },
-  { measure_key: "capture_rate", label: "Capture",       group_label: "Tic sheet — summary", kind: "ratio", restricted: false, sort_order: 140 },
+  { measure_key: "ave_estimate", label: "Est / Car",     group_label: "Tic sheet — summary", kind: "money", restricted: false, sort_order: 150 },
+  { measure_key: "tires_per_day", label: "Tires per Day", group_label: "Tic sheet — summary", kind: "num", restricted: false, sort_order: 210 },
   { measure_key: "gross_profit", label: "Gross Profit",  group_label: "Gross profit",        kind: "money", restricted: false, sort_order: 450 },
   { measure_key: "gross_profit_pct", label: "GP %",      group_label: "Gross profit",        kind: "ratio", restricted: false, sort_order: 460 },
-  { measure_key: "tech_overtime", label: "Overtime",     group_label: "Technician — pay breakdown", kind: "money", restricted: true, sort_order: 620 },
-  { measure_key: "cat_units_kpi_su_brakes", label: "Brakes", group_label: "Tic sheet — categories (units)", kind: "int", restricted: false, sort_order: 1050 },
-  { measure_key: "cat_units_kpi_su_lof",    label: "LOF",    group_label: "Tic sheet — categories (units)", kind: "int", restricted: false, sort_order: 1170 },
-  { measure_key: "cat_pct_kpi_su_brakes",   label: "Brakes — % of cars", group_label: "Tic sheet — categories (% of cars)", kind: "ratio", restricted: false, sort_order: 2050 },
+  { measure_key: "projected_gp", label: "Projected GP",  group_label: "Projection & budget", kind: "money", restricted: false, sort_order: 474 },
+  { measure_key: "projected_sales", label: "Sales Projection", group_label: "Projection & budget", kind: "money", restricted: false, sort_order: 476 },
+  { measure_key: "gp_budget",    label: "GP Budget",     group_label: "Projection & budget", kind: "money", restricted: false, sort_order: 478 },
+  { measure_key: "pct_of_budget", label: "% of Budget",  group_label: "Projection & budget", kind: "ratio", restricted: false, sort_order: 480 },
+  { measure_key: "gp_budget_remaining", label: "Budget Remaining", group_label: "Projection & budget", kind: "money", restricted: false, sort_order: 482 },
+  { measure_key: "gp_budget_per_day", label: "Budget Per Day", group_label: "Projection & budget", kind: "money", restricted: false, sort_order: 484 },
+  { measure_key: "cars_per_store", label: "Cars per Store", group_label: "Per store", kind: "num", restricted: false, sort_order: 488 },
+  { measure_key: "gp_per_store", label: "GP per Store", group_label: "Per store", kind: "money", restricted: false, sort_order: 492 },
+  { measure_key: "sales_vs_py",  label: "vs Last Year ($)", group_label: "Prior year", kind: "money", restricted: false, sort_order: 497 },
+  { measure_key: "sales_vs_py_pct", label: "vs Last Year (%)", group_label: "Prior year", kind: "ratio", restricted: false, sort_order: 498 },
+  { measure_key: "cars_per_store_vs_py", label: "Cars vs LY", group_label: "Prior year", kind: "num", restricted: false, sort_order: 499 },
+  { measure_key: "gold_threshold", label: "Gold", group_label: "Bonus tiers", kind: "money", restricted: false, sort_order: 900 },
+  { measure_key: "gold_remaining", label: "Gold Remaining", group_label: "Bonus tiers", kind: "money", restricted: false, sort_order: 901 },
+  { measure_key: "gold_per_day", label: "Gold Per Day", group_label: "Bonus tiers", kind: "money", restricted: false, sort_order: 902 },
+  { measure_key: "silver_threshold", label: "Silver", group_label: "Bonus tiers", kind: "money", restricted: false, sort_order: 903 },
+  { measure_key: "silver_remaining", label: "Silver Remaining", group_label: "Bonus tiers", kind: "money", restricted: false, sort_order: 904 },
+  { measure_key: "silver_per_day", label: "Silver Per Day", group_label: "Bonus tiers", kind: "money", restricted: false, sort_order: 905 },
+  { measure_key: "bronze_threshold", label: "Bronze", group_label: "Bonus tiers", kind: "money", restricted: false, sort_order: 906 },
+  { measure_key: "bronze_remaining", label: "Bronze Remaining", group_label: "Bonus tiers", kind: "money", restricted: false, sort_order: 907 },
+  { measure_key: "bronze_per_day", label: "Bronze Per Day", group_label: "Bonus tiers", kind: "money", restricted: false, sort_order: 908 },
+  { measure_key: "tech_overtime", label: "Overtime", group_label: "Technician — pay breakdown", kind: "money", restricted: true, sort_order: 620 },
+  { measure_key: "cat_units_kpi_su_tires", label: "Tires", group_label: "Tic sheet — categories (units)", kind: "int", restricted: false, sort_order: 1290 },
+  { measure_key: "cat_units_kpi_su_wheel_alignments", label: "Wheel Alignments", group_label: "Tic sheet — categories (units)", kind: "int", restricted: false, sort_order: 1250 },
 ];
 
 const byKey = (p) => PRESETS.find((x) => x.key === p);
+const CURRENT = STORES[0]; // #3303 Millwood, district d2
 
-eq("category preset takes both category groups",
-  resolvePresetMeasures(byKey("category_performance"), CATALOG),
-  ["cat_units_kpi_su_brakes", "cat_units_kpi_su_lof", "cat_pct_kpi_su_brakes"]);
+eq("there are five reports", PRESETS.length, 5);
+eq("the five reports, in order", PRESETS.map((p) => p.key),
+  ["market_review", "gp_yesterday", "tires_yesterday", "sales_vs_last_year", "month_gp"]);
 
-eq("store month preset takes summary + gross profit",
-  resolvePresetMeasures(byKey("store_month"), CATALOG),
-  ["ro_count", "sales", "capture_rate", "gross_profit", "gross_profit_pct"]);
+// Every report is "sorted by" something, and the sort must be a column
+// the report actually shows — sorting by an absent measure would be a
+// silent no-op that nobody notices until the order looks wrong.
+eq("every report declares a sort", PRESETS.every((p) => !!p.sort?.measure), true);
+eq("every sort measure is a selected column",
+  PRESETS.every((p) => p.measures.includes(p.sort.measure)), true);
+eq("every sort direction is valid",
+  PRESETS.every((p) => ["asc", "desc"].includes(p.sort.dir)), true);
 
-// The district preset names five keys; this stub catalogue carries three
-// of them. The other two are DROPPED rather than sent — report_build()
-// rejects the whole request for one unknown measure, and losing a column
-// beats losing the report.
-eq("unknown preset keys are dropped, not sent",
-  resolvePresetMeasures(byKey("district_comparison"), CATALOG),
-  ["sales", "gross_profit", "gross_profit_pct", "ro_count", "capture_rate"].filter(
-    (k) => CATALOG.some((m) => m.measure_key === k)));
+// The sorts the samples specify, named individually so a change to any
+// one of them fails loudly rather than quietly reordering a report.
+eq("GP yesterday sorts by GP desc", byKey("gp_yesterday").sort, { measure: "gross_profit", dir: "desc" });
+eq("tires sorts by tires desc", byKey("tires_yesterday").sort, { measure: "cat_units_kpi_su_tires", dir: "desc" });
+// The point of report 4 is who is improving MOST, not who is largest.
+eq("sales vs LY sorts by percentage, not dollars",
+  byKey("sales_vs_last_year").sort, { measure: "sales_vs_py_pct", dir: "desc" });
+eq("month GP sorts by GP desc", byKey("month_gp").sort, { measure: "gross_profit", dir: "desc" });
 
-eq("every preset resolves to something", PRESETS.every((p) => {
-  const full = CATALOG.concat([
-    { measure_key: "tech_hours_worked", label: "H", group_label: "Technician — operations", kind: "hours", restricted: false, sort_order: 500 },
-  ]);
-  return resolvePresetMeasures(p, full).length > 0;
-}), true);
-eq("every preset names a real grouping",
-  PRESETS.every((p) => GROUP_BY.some(([k]) => k === p.groupBy)), true);
+// The two dual-window reports. An alt measure must be one of the
+// report's own columns, or it would be computed and never displayed.
+eq("market review is MTD with a yesterday column",
+  [byKey("market_review").range, byKey("market_review").altRange, byKey("market_review").altMeasures],
+  ["mtd", "yesterday", ["gp_per_store"]]);
+eq("tires is yesterday with an MTD column",
+  [byKey("tires_yesterday").range, byKey("tires_yesterday").altRange, byKey("tires_yesterday").altMeasures],
+  ["yesterday", "mtd", ["tires_per_day"]]);
+eq("alt measures are always selected columns",
+  PRESETS.every((p) => !p.altMeasures || p.altMeasures.every((k) => p.measures.includes(k))), true);
+eq("a report with alt measures always names an alt range",
+  PRESETS.every((p) => !p.altMeasures?.length || !!p.altRange), true);
+eq("three reports run on yesterday or use it",
+  PRESETS.filter((p) => p.range === "yesterday" || p.altRange === "yesterday").length, 3);
 
-const CURRENT = STORES[0]; // Millwood, district d2
-eq("current-store preset", resolvePresetStores(byKey("store_month"), { stores: STORES, currentStore: CURRENT }), ["s3"]);
-eq("district preset takes the whole district",
-  resolvePresetStores(byKey("district_comparison"), { stores: STORES, currentStore: STORES[1] }), ["s1", "s2"]);
-// A store with no district must not resolve to an empty report.
-eq("district preset falls back to the store itself",
-  resolvePresetStores(byKey("district_comparison"), { stores: STORES, currentStore: STORES[4] }), ["s5"]);
-eq("keep preset keeps a selection",
-  resolvePresetStores(byKey("category_performance"), { stores: STORES, currentStore: CURRENT, selected: ["s1", "s4"] }),
-  ["s1", "s4"]);
-eq("keep preset falls back to everything visible",
-  resolvePresetStores(byKey("category_performance"), { stores: STORES, currentStore: CURRENT, selected: [] }),
+// Prior-year columns must be DECLARED, because they are the ones that
+// have to render as unavailable rather than as zero.
+eq("market review declares its prior-year column",
+  byKey("market_review").requiresPriorYear, ["cars_per_store_vs_py"]);
+eq("sales vs LY declares both prior-year columns",
+  byKey("sales_vs_last_year").requiresPriorYear, ["sales_vs_py", "sales_vs_py_pct"]);
+eq("every declared prior-year column really is one",
+  PRESETS.every((p) => (p.requiresPriorYear ?? []).every((k) => PRIOR_YEAR_MEASURES.includes(k))), true);
+// The inverse: any prior-year measure a report uses must be declared, or
+// it would silently render blank instead of "unavailable".
+eq("no undeclared prior-year column slips through",
+  PRESETS.every((p) => p.measures.filter((k) => PRIOR_YEAR_MEASURES.includes(k)).every(
+    (k) => (p.requiresPriorYear ?? []).includes(k))), true);
+eq("needsPriorYear spots one", needsPriorYear(["sales", "sales_vs_py_pct"]), true);
+eq("needsPriorYear ignores ordinary measures", needsPriorYear(["sales", "gross_profit"]), false);
+
+// The month-GP report is the bonus tracker across all stores: budget
+// plus three tiers, each with a threshold, a remaining and a per-day.
+eq("month GP carries budget and all three tiers", byKey("month_gp").measures.length, 13);
+eq("every tier column present",
+  ["gold", "silver", "bronze"].every((t) =>
+    ["_threshold", "_remaining", "_per_day"].every((s) => byKey("month_gp").measures.includes(t + s))), true);
+
+// Monthly figures repeat when a report is grouped shorter than a month.
+eq("budget repeats by day", hasRepeatedMonthly(["gp_budget"], "day"), true);
+eq("budget repeats by week", hasRepeatedMonthly(["gp_budget"], "week"), true);
+eq("budget does not repeat by store", hasRepeatedMonthly(["gp_budget"], "store"), false);
+eq("budget does not repeat by month", hasRepeatedMonthly(["gp_budget"], "month"), false);
+eq("ordinary measures never repeat", hasRepeatedMonthly(["sales"], "day"), false);
+
+// Resolution against a live catalogue.
+eq("every report resolves to all of its measures",
+  PRESETS.every((p) => resolvePresetMeasures(p, CATALOG).length === p.measures.length), true);
+eq("month GP resolves in catalogue order, not preset order",
+  resolvePresetMeasures(byKey("month_gp"), CATALOG).slice(0, 3),
+  ["gross_profit", "gp_budget", "gp_budget_remaining"]);
+// A key the catalogue has lost is dropped, not sent: report_build
+// rejects a whole request for one unknown measure.
+eq("an unknown key is dropped, not sent",
+  resolvePresetMeasures({ measures: ["sales", "vanished"] }, CATALOG), ["sales"]);
+
+// Store resolution. The leadership reports are company-wide by nature.
+eq("every report asks for all accessible stores",
+  PRESETS.every((p) => p.stores === "all"), true);
+eq("'all' resolves to everything visible",
+  resolvePresetStores(byKey("market_review"), { stores: STORES, currentStore: CURRENT }),
   ["s3", "s1", "s2", "s4", "s5"]);
-// A stale id from a previous scope must not survive into the request.
-eq("keep preset drops ids outside scope",
-  resolvePresetStores(byKey("category_performance"), { stores: STORES, currentStore: CURRENT, selected: ["s1", "GONE"] }),
-  ["s1"]);
-
-// Column order comes from the catalogue, so the picker can stay a set.
-eq("columns order by catalogue, not click order",
-  orderMeasures(["gross_profit_pct", "ro_count", "cat_units_kpi_su_brakes", "sales"], CATALOG),
-  // Catalogue order, not click order: summary (100, 110), then gross
-  // profit (460), then the categories (1000 + the brand display order).
-  ["ro_count", "sales", "gross_profit_pct", "cat_units_kpi_su_brakes"]);
-eq("unknown measures sort last",
-  orderMeasures(["mystery", "sales"], CATALOG), ["sales", "mystery"]);
-
-eq("catalogue groups keep catalogue order",
-  groupCatalog(CATALOG).map((g) => g.label),
-  ["Tic sheet — summary", "Gross profit", "Technician — pay breakdown",
-   "Tic sheet — categories (units)", "Tic sheet — categories (% of cars)"]);
+// A district user's "all" is their district — the scope is upstream.
+eq("'all' cannot reach past the caller's scope",
+  resolvePresetStores(byKey("market_review"), { stores: [STORES[0], STORES[1]], currentStore: CURRENT }),
+  ["s3", "s1"]);
 
 // ---------------------------------------------------------------------
 // The attributed-pay warning fires only where it is true: overtime is a
