@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { GOLD, applyBorders, downloadWorkbook, headerFill, subHeaderFill } from "./excelStyle.js";
 import { excelValue, numFmtFor, sheetName } from "./reportSpec.js";
+import { indexRules, matchRule, tokenArgb } from "./reportFormat.js";
 
 // =====================================================================
 // The Report Builder's workbook.
@@ -36,8 +37,10 @@ const fmtDate = (iso) => {
 // next column off the page.
 const widthFor = (col) => Math.min(34, Math.max(col.kind === "money" || col.kind === "rate" ? 16 : 12, col.label.length + 3));
 
-function writeTable(ws, { title, subtitle, firstColLabel, firstColWidth, columns, rows }) {
+function writeTable(ws, { title, subtitle, firstColLabel, firstColWidth, columns, rows, rules, unavailable }) {
   const nCols = columns.length + 1;
+  const idx = indexRules(rules ?? []);
+  const gone = new Set(unavailable ?? []);
 
   ws.mergeCells(1, 1, 1, nCols);
   ws.getCell("A1").value = title;
@@ -50,13 +53,43 @@ function writeTable(ws, { title, subtitle, firstColLabel, firstColWidth, columns
   }
   ws.addRow([]);
 
-  const hRow = ws.addRow([firstColLabel, ...columns.map((c) => c.label)]);
+  // A column reading the other window says so in the header, exactly as
+  // it does on screen. Two windows side by side with identical-looking
+  // headers is how somebody quotes yesterday's number as the month's.
+  const hRow = ws.addRow([
+    firstColLabel,
+    ...columns.map((c) =>
+      c.label + (c.altWindow ? ` (${c.altWindow})` : "") + (gone.has(c.key) ? " (no 2025 data)" : "")),
+  ]);
   headerFill(hRow);
+  hRow.alignment = { wrapText: true, vertical: "bottom", horizontal: "right" };
   applyBorders(hRow, 1, nCols);
   const headerRowNumber = hRow.number;
 
-  for (const r of rows) {
-    const row = ws.addRow([r.bucket_label, ...columns.map((c) => excelValue(r.measures?.[c.key]))]);
+  rows.forEach((r, i) => {
+    const rank = r.is_total ? 0 : i + 1;
+    const row = ws.addRow([
+      r.bucket_label,
+      ...columns.map((c) => {
+        if (gone.has(c.key)) return "n/a";
+        const raw = r.measures?.[c.key];
+        const rule = matchRule(idx.for(c.key), c.key, raw, { rank });
+        // A rule's label REPLACES the value — BOOM! is a string in a
+        // money column, and that is correct: the number stopped being
+        // the point once the tier was cleared.
+        return rule?.label ?? excelValue(raw);
+      }),
+    ]);
+
+    // Fills are applied per CELL, because a rule matches a value rather
+    // than a column, and the same column can carry three different bands.
+    columns.forEach((c, j) => {
+      if (gone.has(c.key)) return;
+      const rule = matchRule(idx.for(c.key), c.key, r.measures?.[c.key], { rank });
+      const argb = rule ? tokenArgb(rule.color_token) : null;
+      if (argb) row.getCell(j + 2).fill = { type: "pattern", pattern: "solid", fgColor: { argb } };
+    });
+
     if (r.is_total) {
       // The total row is computed by report_build() over the whole set,
       // not summed down the column — a capture rate cannot be added up.
@@ -64,7 +97,7 @@ function writeTable(ws, { title, subtitle, firstColLabel, firstColWidth, columns
       subHeaderFill(row);
     }
     applyBorders(row, 1, nCols);
-  }
+  });
 
   ws.getColumn(1).width = firstColWidth;
   columns.forEach((c, i) => {
@@ -97,9 +130,11 @@ export async function exportReportWorkbook({
   perStoreRows = null,
   stores = [],
   missingStores = [],
+  rules = [],
+  unavailable = [],
   meta = {},
 }) {
-  const { from, to, groupByLabel = "Group", rangeLabel = "" } = meta;
+  const { from, to, groupByLabel = "Group", rangeLabel = "", altLabel = null, sort = null } = meta;
   const wb = new ExcelJS.Workbook();
   wb.created = new Date();
 
@@ -112,6 +147,8 @@ export async function exportReportWorkbook({
     rangeLabel,
     scope,
     `Grouped by ${groupByLabel.toLowerCase()}`,
+    sort ? `Sorted by ${sort.measure} ${sort.dir === "desc" ? "high to low" : "low to high"}` : null,
+    altLabel ? `Columns marked with a window read ${altLabel}` : null,
   ]
     .filter(Boolean)
     .join("  ·  ");
@@ -124,6 +161,8 @@ export async function exportReportWorkbook({
     firstColWidth: 30,
     columns,
     rows,
+    rules,
+    unavailable,
   });
   appendMissingStores(summary, columns.length + 1, missingStores);
 
@@ -152,6 +191,8 @@ export async function exportReportWorkbook({
         firstColWidth: 16,
         columns,
         rows: storeRows,
+        rules,
+        unavailable,
       });
     }
   }
