@@ -14,13 +14,23 @@
   /* Native controls (date pickers, selects, scrollbars) render dark. */
   color-scheme: dark;
 
-  /* Surfaces — three ascending levels give elevation without shadows. */
+  /* Surfaces — four ascending levels give elevation without shadows. */
   --surface-page: #0B0B0C;
   --surface-card: #141416;
   --surface-overlay: #1C1C20;
+  /* One step above overlay, for the selected segment of a control that
+     already sits ON an overlay. Added when the Task 8 payroll day-mode
+     toggle referenced a `surface-raised` class that had never existed,
+     so its active segment rendered with no background at all. Text on it
+     is AA-verified rather than eyeballed: --text-primary reaches 12.25:1
+     and --text-secondary 5.40:1. */
+  --surface-raised: #26262B;
   --surface-input: #1C1C20;
   --surface-stripe: #171719; /* barely-lighter table row striping */
-  --surface-inverse: #FFFFFF; /* logo plate only */
+  /* Pure white, used only at low alpha to tint table bands (Tech Tracker
+     week/total rows). It was the logo plate until the dark-UI master made
+     a plate unnecessary; it is NOT a usable background at full opacity. */
+  --surface-inverse: #FFFFFF;
   --scrim: rgba(0, 0, 0, 0.7); /* modal backdrop */
 
   /* Borders carry the weight that shadows do in light UI. */

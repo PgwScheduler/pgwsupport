@@ -84,6 +84,25 @@ export function shiftWeek(weekStart, delta, cutover) {
 export const weekEndOf = (weekStart, cutover) =>
   addDays(weekStart, daysForWeek(weekStart, cutover).length - 1);
 
+// Every distinct pay week a date range touches, oldest first, each on
+// whichever basis applies to it. A range spanning the cutover therefore
+// yields Monday-start weeks before it and Sunday-start weeks after, with
+// no gap and no overlap — which is exactly what the two bases guarantee.
+//
+// Payroll renders ONE WHOLE WEEK at a time from this list, so its
+// overtime is computed over a full week by construction: the displayed
+// slice is always a complete week, never a fragment of the range.
+export function weeksInRange(from, to, cutover) {
+  const out = [];
+  let d = from;
+  while (d <= to) {
+    const ws = weekStartOf(d, cutover);
+    if (out[out.length - 1] !== ws) out.push(ws);
+    d = addDays(d, 1);
+  }
+  return out;
+}
+
 export function weekLabel(weekStart, cutover) {
   const a = asDate(weekStart);
   const b = asDate(weekEndOf(weekStart, cutover));

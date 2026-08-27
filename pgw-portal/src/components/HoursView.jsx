@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Printer, Plus, Trash2, Lock, Wrench } from "lucide-react";
 import { usePayroll } from "../hooks/usePayroll.js";
 import { usePayrollConfig } from "../hooks/usePayrollConfig.js";
-import { thisWeekStart, weekLabel, shiftWeek, daysForWeek } from "../lib/weekUtils.js";
+import { thisWeekStart, weekLabel, weeksInRange, daysForWeek } from "../lib/weekUtils.js";
+import { useDateRange } from "../context/DateRangeProvider.jsx";
+import { DateRangeControl } from "./DateRangeControl.jsx";
 import {
   computeStoreRow, computePayRow, computePayrollSummary, POSITIONS, TARGETS,
 } from "../lib/payrollMath.js";
@@ -64,8 +66,24 @@ function Th({ children, className = "" }) {
 }
 
 function MidasHoursView({ store, cutover, onNavigate }) {
+  // The shared range decides WHICH weeks are available; the grid still
+  // renders one WHOLE week at a time. That is what keeps overtime a
+  // whole-week figure here — the displayed slice is never a fragment of
+  // a week, so a range cutting a week in half cannot reach the engine.
+  const { from, to } = useDateRange();
+  const weekList = useMemo(() => weeksInRange(from, to, cutover), [from, to, cutover]);
   const [week, setWeek] = useState(() => thisWeekStart(cutover));
   const [dayMode, setDayMode] = useState("hours_worked");
+
+  // Keep the open week inside the range. Landing on the LAST week in the
+  // range is the useful default: for month-to-date that is the week in
+  // progress, which is the one a manager is actually filling in.
+  useEffect(() => {
+    if (!weekList.length) return;
+    if (!weekList.includes(week)) setWeek(weekList[weekList.length - 1]);
+  }, [weekList, week]);
+
+  const weekIdx = weekList.indexOf(week);
   const [pendingRemove, setPendingRemove] = useState(null); // { id, name } awaiting confirmation
   const {
     rows, dates, isDaily, privileged, rpcSummary, flatFlags, loading, error,
@@ -160,19 +178,29 @@ function MidasHoursView({ store, cutover, onNavigate }) {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1">
-              <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, -1, cutover))}>
+              <GhostBtn
+                onClick={() => setWeek(weekList[Math.max(0, weekIdx - 1)])}
+                disabled={weekIdx <= 0}
+                title="Previous week in range"
+              >
                 <ChevronLeft className="h-4 w-4" />
               </GhostBtn>
               <div className="rounded-md border border-hairline-strong bg-surface-overlay px-3 py-2 text-sm font-medium text-content-primary">
                 Week of {weekLabel(week, cutover)}
                 <span className="ml-1.5 text-xs font-normal text-content-muted">
                   {isDaily ? "Sun–Sat" : "Mon–Sat"}
+                  {weekList.length > 1 && ` · ${weekIdx + 1} of ${weekList.length}`}
                 </span>
               </div>
-              <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, 1, cutover))}>
+              <GhostBtn
+                onClick={() => setWeek(weekList[Math.min(weekList.length - 1, weekIdx + 1)])}
+                disabled={weekIdx < 0 || weekIdx >= weekList.length - 1}
+                title="Next week in range"
+              >
                 <ChevronRight className="h-4 w-4" />
               </GhostBtn>
             </div>
+            <DateRangeControl />
             {isDaily && (
               <DayModeToggle modes={DAY_MODES} value={dayMode} onChange={setDayMode} />
             )}

@@ -1,0 +1,91 @@
+-- =====================================================================
+-- PGW Support Portal — close a per-technician pay leak
+-- Run AFTER pgw_dashboard_range_metrics_33.sql, in the Supabase SQL Editor.
+-- Safe to re-run.
+-- =====================================================================
+-- SECURITY FIX. `_tech_days` was reachable by any signed-in store user
+-- and returned PER-SLOT, PER-DAY `guar_pay`, `commission` and
+-- `guar_rate` — an individual technician's pay, which is exactly what
+-- migrations 14 and 24 built a wall around. `tech_slots` is
+-- store-visible, so every row was attributable to a named person, and
+-- `guar_rate` handed over a technician's guarantee rate outright while
+-- `commission / flag` yields their flat rate.
+--
+-- Confirmed live, signed in as a store user (role `store`, scoped to
+-- #3303): `_tech_days('#3303', '2026-07-01', '2026-08-01')` returned 83
+-- rows including `guar_rate: 16` and `commission: 244.80` for the slot
+-- holding a named technician.
+--
+-- WHY THE ORIGINAL REVOKE DID NOTHING
+--   revoke all on function public._tech_days(...) from public;
+-- revokes from the PUBLIC pseudo-role. Supabase separately grants
+-- EXECUTE on functions in the `public` schema to the `authenticated`
+-- and `anon` roles, and revoking from PUBLIC does not touch those
+-- grants. The statement looked like protection and was a no-op. Present
+-- since migration 24 and repeated in 29, 30, 31 and 33.
+--
+-- The tell was available all along: `schedule_copy_month` carries the
+-- same `revoke ... from public` in migration 30 and the app calls it
+-- successfully on every month duplication. If that revoke had bitten,
+-- the feature would have been broken from the day it shipped.
+--
+-- WHAT IS SAFE TO REVOKE, AND WHAT IS NOT
+-- A SECURITY DEFINER function runs as its owner, who keeps EXECUTE, so
+-- revoking a helper from `authenticated` never breaks a definer caller.
+-- A SECURITY INVOKER function runs as the caller and does need the
+-- grant.
+--
+--   _tech_days       called only by tech_store_month / tech_store_daily,
+--                    both SECURITY DEFINER          -> SAFE to revoke
+--   _tech_pay_range  called only by tech_store_range,
+--                    dashboard_range_metrics and
+--                    payroll_to_sales_range, all
+--                    SECURITY DEFINER               -> SAFE to revoke
+--   _schedule_copy_plan
+--                    called by schedule_copy_month, which is
+--                    **SECURITY INVOKER** (migration 30)
+--                                                   -> MUST NOT be
+--                    revoked; doing so breaks Employee Schedule month
+--                    duplication for every non-superuser. It is left
+--                    reachable deliberately. It leaks nothing: running
+--                    as the caller, it returns only schedule rows their
+--                    own RLS already admits, and it carries no pay.
+--
+-- Neither app path calls the underscore helpers directly — grep of
+-- pgw-portal/src returns nothing — so no frontend change is needed.
+-- =====================================================================
+
+revoke all on function public._tech_days(uuid, date, date)
+  from public, anon, authenticated;
+
+revoke all on function public._tech_pay_range(date, date, uuid)
+  from public, anon, authenticated;
+
+
+-- =====================================================================
+-- VERIFY
+--
+--  1) As a STORE user, the helper is now unreachable:
+--       select * from public._tech_days('LOC', '2026-07-01', '2026-08-01');
+--       -- ERROR: permission denied for function _tech_days
+--
+--  2) ...while every legitimate aggregate still works for that same
+--     store user, because each is SECURITY DEFINER and runs as owner:
+--       select * from public.tech_store_month('LOC', '2026-07-01');
+--       select * from public.tech_store_daily('LOC', '2026-07-01');
+--       select * from public.tech_store_range('LOC', '2026-07-01', '2026-07-31');
+--       select * from public.dashboard_range_metrics('2026-07-01', '2026-07-31');
+--       select * from public.payroll_to_sales_range('2026-08-30', '2026-09-05');
+--
+--  3) Employee Schedule duplication still works — the check that this
+--     migration did NOT over-revoke. As a store user, preview a copy:
+--       select * from public.schedule_copy_month(
+--         'LOC', '2026-07-01', '2026-08-01', 'fill', false);
+--       -- returns a plan; if this errors with "permission denied for
+--       -- function _schedule_copy_plan", the revoke went too far.
+--
+--  4) Individual pay is still absent everywhere it should be:
+--       select * from public.employee_pay_rates;  -- 0 rows
+--       select * from public.tech_pay_rates;      -- 0 rows
+--       select * from public.tech_weekly;         -- 0 rows
+-- =====================================================================

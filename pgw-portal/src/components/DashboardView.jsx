@@ -8,6 +8,9 @@ import { weekLabel } from "../lib/weekUtils.js";
 import { Card, GhostBtn, SectionHeader } from "./ui.jsx";
 import { ExportRangeModal } from "./ExportRangeModal.jsx";
 import { PayrollToSalesCard } from "./payroll/PayrollToSalesCard.jsx";
+import { DateRangeControl } from "./DateRangeControl.jsx";
+import { RangeWidgets } from "./dashboard/RangeWidgets.jsx";
+import { useDashboardRange } from "../hooks/useDashboardRange.js";
 
 function StatCard({ label, value, sub, tone }) {
   const toneCls = tone === "pos" ? "text-success" : tone === "neg" ? "text-danger" : "text-content-primary";
@@ -27,6 +30,12 @@ export function DashboardView({ store, onNavigate }) {
   } = useDashboard(store.id);
   const [rangeOpen, setRangeOpen] = useState(false);
   const canExportRange = (stores?.length ?? 0) > 1;
+  // null = every store this user can see. The narrowing is a convenience:
+  // the DATABASE decides what "everything you can see" means, so a store
+  // user with no selector still gets exactly their store.
+  const [scopeStoreId, setScopeStoreId] = useState(null);
+  const multiStore = (stores?.length ?? 0) > 1;
+  const rangeData = useDashboardRange(scopeStoreId);
 
   const totals = latestDrawer ? computeTotals(latestDrawer, store.drawer_float) : null;
   // Hours arrive from payroll_week_hours already summed per employee and
@@ -42,16 +51,52 @@ export function DashboardView({ store, onNavigate }) {
         title="Dashboard"
         subtitle={store.name}
         action={
-          canExportRange && (
-            <GhostBtn onClick={() => setRangeOpen(true)}>
-              <FileSpreadsheet className="h-4 w-4" /> Export all stores' closeouts (Excel)
-            </GhostBtn>
-          )
+          <div className="flex flex-wrap items-center gap-2">
+            {multiStore && (
+              <select
+                value={scopeStoreId ?? ""}
+                onChange={(e) => setScopeStoreId(e.target.value || null)}
+                className="rounded-md border border-hairline-strong bg-surface-overlay px-2 py-2 text-sm text-content-primary outline-none"
+                title="Narrow the widgets to one store"
+              >
+                <option value="">All stores you can see</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>#{s.store_number} — {s.name}</option>
+                ))}
+              </select>
+            )}
+            <DateRangeControl />
+            {canExportRange && (
+              <GhostBtn onClick={() => setRangeOpen(true)}>
+                <FileSpreadsheet className="h-4 w-4" /> Closeouts (Excel)
+              </GhostBtn>
+            )}
+          </div>
         }
       />
 
       {error && (
         <p className="rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>
+      )}
+
+      {rangeData.error && (
+        <p className="rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">
+          {rangeData.error}
+        </p>
+      )}
+
+      {/* The five range-driven widgets. They answer "how is the business
+          doing over this window", which is a different question from the
+          this-week operational strip below, so they lead. */}
+      {rangeData.loading ? (
+        <p className="px-1 py-6 text-center text-sm text-content-muted">Loading…</p>
+      ) : (
+        <RangeWidgets
+          metrics={rangeData.metrics}
+          payroll={rangeData.payroll}
+          from={rangeData.from}
+          to={rangeData.to}
+        />
       )}
 
       {loading ? (

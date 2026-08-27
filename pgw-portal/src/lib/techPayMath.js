@@ -75,7 +75,11 @@ export function computeTechDay(day, rate) {
   const commission = flag * num(rate?.flat_rate); //          L = F*flat
   // ELR = labor<=0 ? 0 : labor/flag. Guard flag=0 so it never returns Inf.
   const elr = labor <= 0 || flag === 0 ? 0 : labor / flag;
-  return { hours, flag, labor, guaranteePay, commission, elr };
+  // `iso` and `inRange` are carried through untouched so a caller can tell
+  // which day a computed row belongs to, and whether it falls inside the
+  // selected date range. Neither affects any figure: the week is always
+  // computed over all seven days, and inRange only decides what is drawn.
+  return { iso: day?.iso, inRange: day?.inRange, hours, flag, labor, guaranteePay, commission, elr };
 }
 
 // ---- Per week --------------------------------------------------------
