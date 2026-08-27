@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../context/AuthProvider.jsx";
+import { weeksTouching, isWholeCalendarMonth } from "../lib/dateRange.js";
 import {
-  monthWeekStarts, weekStartOf, rateForDate,
+  weekStartOf, rateForDate,
   computeTechWeek, computeTechMonth, computeTechSummaryStore,
 } from "../lib/techPayMath.js";
 
@@ -12,7 +13,7 @@ const addDays = (iso, n) => {
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 };
-const pad = (n) => String(n).padStart(2, "0");
+
 
 // Technician Tracker data for one store + one month.
 //   - tech_slots / tech_daily are store-visible (hours/flag/labor).
@@ -21,15 +22,29 @@ const pad = (n) => String(n).padStart(2, "0");
 //     rate or a pay figure. Per-technician pay is derived client-side from
 //     the rates (techPayMath). Store-level labor cost + the daily allocation
 //     come from the SECURITY DEFINER RPCs, which a store MAY call.
-export function useTechTracker(locationId, year, month) {
+// Driven by the shared date range, not a month.
+//
+// THE PAY ENGINE ALWAYS SEES WHOLE WEEKS. `weeks` covers every Sunday–
+// Saturday week the range touches, and each is fetched and computed in
+// full whatever the range's own edges are, so a range that cuts a week
+// in half cannot produce half-week overtime — the week is evaluated at
+// its true 40-hour threshold and the screen simply shows part of it,
+// labelled partial.
+export function useTechTracker(locationId, from, to) {
   const { role } = useAuth();
   const privileged = PRIVILEGED.includes(role);
 
-  const weekStarts = useMemo(() => monthWeekStarts(year, month), [year, month]);
+  // NOT a fixed five blocks. monthWeekStarts() always returned exactly
+  // five, which silently drops the tail of a 31-day month beginning on a
+  // Saturday: August 2026 starts Saturday the 1st, so its five blocks
+  // ended on the 29th and the 30th and 31st fell off the screen. That is
+  // the same defect the tic sheet fixed in migration 25, and it matters
+  // more now — the 30th is the payroll daily-entry cutover.
+  const weeks = useMemo(() => weeksTouching(from, to), [from, to]);
+  const weekStarts = useMemo(() => weeks.map((w) => w.weekStart), [weeks]);
   const rangeStart = weekStarts[0];
-  const rangeEnd = addDays(weekStarts[4], 7); // exclusive
-  const monthStart = `${year}-${pad(month)}-01`;
-  const monthEnd = `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`;
+  const rangeEnd = addDays(weekStarts[weekStarts.length - 1], 7); // exclusive
+  const isMonth = useMemo(() => isWholeCalendarMonth(from, to), [from, to]);
 
   const [slots, setSlots] = useState([]);
   const [employees, setEmployees] = useState([]); // active roster (for assignment / rates)
@@ -53,9 +68,9 @@ export function useTechTracker(locationId, year, month) {
         .eq("location_id", locationId).eq("active", true).order("full_name"),
       supabase.from("tech_daily").select("*")
         .eq("location_id", locationId).gte("work_date", rangeStart).lt("work_date", rangeEnd),
-      supabase.rpc("tech_store_month", { loc: locationId, month_start: monthStart }),
+      supabase.rpc("tech_store_range", { loc: locationId, d_from: from, d_to: to }),
       supabase.from("daily_kpi").select("sales_groupon")
-        .eq("location_id", locationId).gte("business_date", monthStart).lte("business_date", monthEnd),
+        .eq("location_id", locationId).gte("business_date", from).lte("business_date", to),
     ]);
 
     if (slotRes.error) { setError(slotRes.error.message); setLoading(false); return; }
@@ -80,7 +95,7 @@ export function useTechTracker(locationId, year, month) {
       setRates([]);
     }
     setLoading(false);
-  }, [locationId, rangeStart, rangeEnd, monthStart, monthEnd, privileged]);
+  }, [locationId, rangeStart, rangeEnd, from, to, privileged]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -101,30 +116,52 @@ export function useTechTracker(locationId, year, month) {
     return m;
   }, [rates]);
 
-  // Per-slot computed view: 5 week blocks + month totals. Pay figures are
-  // present only when privileged (rates loaded); otherwise store-visible
-  // metrics only.
+  // Per-slot computed view: one block per WHOLE week the range touches,
+  // plus range totals. Pay figures are present only when privileged
+  // (rates loaded); otherwise store-visible metrics only.
+  //
+  // Each week is computed over all seven of its days even when the range
+  // covers only part of it, because overtime and the guarantee-versus-
+  // commission choice are properties of the whole week. `partial` marks
+  // those weeks so the UI can label their totals rather than let them
+  // read as if they belonged wholly to the range.
   const slotViews = useMemo(() => {
     return slots.map((slot) => {
       const empRates = slot.employee_id ? ratesByEmp[slot.employee_id] ?? [] : [];
-      const monthDays = [];
-      const weeks = weekStarts.map((ws) => {
+      const rangeDays = [];
+      const slotWeeks = weeks.map((w) => {
         const days = [];
         for (let i = 0; i < 7; i++) {
-          const iso = addDays(ws, i);
+          const iso = addDays(w.weekStart, i);
           const row = dailyBySlot[slot.id]?.[iso] ?? { hours_worked: 0, flag_hours: 0, labor_sales: 0 };
-          days.push({ iso, ...row });
-          monthDays.push(row);
+          const inRange = iso >= from && iso <= to;
+          days.push({ iso, inRange, ...row });
+          // Store-visible metrics describe the RANGE, so they take only
+          // the days asked for; the pay engine above takes all seven.
+          if (inRange) rangeDays.push(row);
         }
-        const rate = privileged ? rateForDate(empRates, ws) : null;
-        const otherPay = otherPayBySlotWeek[slot.id]?.[ws] ?? 0;
-        return { weekStart: ws, ...computeTechWeek(days, rate, otherPay), rate };
+        const rate = privileged ? rateForDate(empRates, w.weekStart) : null;
+        const otherPay = otherPayBySlotWeek[slot.id]?.[w.weekStart] ?? 0;
+        return {
+          weekStart: w.weekStart,
+          weekEnd: w.weekEnd,
+          partial: w.partial,
+          ...computeTechWeek(days, rate, otherPay),
+          rate,
+        };
       });
-      const store = computeTechSummaryStore(monthDays);
-      const month = privileged ? computeTechMonth(weeks) : null;
-      return { slot, weeks, store, month, hasRate: privileged && empRates.length > 0 };
+      const store = computeTechSummaryStore(rangeDays);
+      const month = privileged ? computeTechMonth(slotWeeks) : null;
+      return {
+        slot,
+        weeks: slotWeeks,
+        store,
+        month,
+        anyPartial: slotWeeks.some((w) => w.partial),
+        hasRate: privileged && empRates.length > 0,
+      };
     });
-  }, [slots, dailyBySlot, otherPayBySlotWeek, ratesByEmp, weekStarts, privileged]);
+  }, [slots, dailyBySlot, otherPayBySlotWeek, ratesByEmp, weeks, from, to, privileged]);
 
   // Days with hours typed against a slot that had nobody in it, so no pay
   // rate resolves and they cost zero. Two shapes count:
@@ -144,7 +181,7 @@ export function useTechTracker(locationId, year, month) {
     for (const d of daily) {
       if (d.employee_id) continue;
       if (!Number(d.hours_worked) && !Number(d.flag_hours) && !Number(d.labor_sales)) continue;
-      if (d.work_date < monthStart || d.work_date > monthEnd) continue;
+      if (d.work_date < from || d.work_date > to) continue;
       const slot = slots.find((s) => s.id === d.tech_slot_id);
       if (!slot) continue;
       const isPlaceholder = !slot.employee_id && !!slot.label;
@@ -163,7 +200,7 @@ export function useTechTracker(locationId, year, month) {
     return [...bySlot.values()]
       .map((g) => ({ ...g, dates: g.dates.sort() }))
       .sort((a, b) => a.slotIndex - b.slotIndex);
-  }, [daily, slots, monthStart, monthEnd]);
+  }, [daily, slots, from, to]);
 
   // Store-level ELR is groupon-blended (Summary R22); other store metrics
   // come from the RPC (labor cost, avg cost/sold hr, shop proficiency).
@@ -269,7 +306,7 @@ export function useTechTracker(locationId, year, month) {
 
   return {
     privileged, loading, error,
-    weekStarts, slotViews, storeSummary, unattributed,
+    weekStarts, weeks, isMonth, from, to, slotViews, storeSummary, unattributed,
     employees, ratesByEmp,
     saveDaily, saveOtherPay, saveRate, saveSlot, reassignSlot, countRowsFrom,
     refetch: fetchAll,

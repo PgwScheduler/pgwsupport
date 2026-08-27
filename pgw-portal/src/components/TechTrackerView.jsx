@@ -4,6 +4,9 @@ import { Card, SectionHeader, GhostBtn, PrimaryBtn, Empty, Field, inputCls } fro
 import { money, pct, numOrDash } from "../lib/format.js";
 import { useTechTracker } from "../hooks/useTechTracker.js";
 import { rateForDate } from "../lib/techPayMath.js";
+import { useDateRange } from "../context/DateRangeProvider.jsx";
+import { DateRangeControl } from "./DateRangeControl.jsx";
+import { rangeLabel } from "../lib/dateRange.js";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
@@ -14,26 +17,11 @@ const dayOfMonth = (iso) => Number(iso.slice(8, 10));
 const inMonth = (iso, y, m) => iso.slice(0, 7) === `${y}-${pad2(m)}`;
 
 export function TechTrackerView({ store }) {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const { from, to } = useDateRange();
   const [selIdx, setSelIdx] = useState(1);
 
-  const tt = useTechTracker(store.id, year, month);
-  const { privileged, loading, error, slotViews, storeSummary, employees, unattributed } = tt;
-
-  const curYm = now.getFullYear() * 12 + now.getMonth();
-  const atCurrentMonth = year * 12 + (month - 1) >= curYm;
-  const shiftMonth = (delta) => {
-    let m = month + delta, y = year;
-    if (m < 1) { m = 12; y -= 1; } else if (m > 12) { m = 1; y += 1; }
-    if (y * 12 + (m - 1) > curYm) return;
-    setYear(y); setMonth(m);
-  };
-  const onPickMonth = (e) => {
-    const [y, m] = e.target.value.split("-").map(Number);
-    if (y && m && y * 12 + (m - 1) <= curYm) { setYear(y); setMonth(m); }
-  };
+  const tt = useTechTracker(store.id, from, to);
+  const { privileged, loading, error, slotViews, storeSummary, employees, unattributed, isMonth } = tt;
 
   const slotByIndex = useMemo(() => {
     const m = {};
@@ -50,19 +38,13 @@ export function TechTrackerView({ store }) {
         title="Tech Tracker"
         subtitle={`#${store.store_number} · ${store.name}`}
         action={
-          <div className="flex items-center gap-2">
-            <GhostBtn onClick={() => shiftMonth(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></GhostBtn>
-            <input type="month" value={`${year}-${pad2(month)}`} max={`${now.getFullYear()}-${pad2(now.getMonth() + 1)}`}
-              onChange={onPickMonth}
-              className="rounded-md border border-hairline-strong bg-surface-overlay px-2 py-1.5 text-sm text-content-primary outline-none" />
-            <GhostBtn onClick={() => shiftMonth(1)} disabled={atCurrentMonth} aria-label="Next month"><ChevronRight className="h-4 w-4" /></GhostBtn>
-          </div>
+          <DateRangeControl />
         }
       />
 
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
-      <StoreStrip s={storeSummary} privileged={privileged} year={year} month={month} />
+      <StoreStrip s={storeSummary} privileged={privileged} from={from} to={to} />
 
       <UnattributedNotice groups={unattributed} privileged={privileged} onGoToSlot={setSelIdx} />
 
@@ -83,15 +65,16 @@ export function TechTrackerView({ store }) {
       </div>
 
       {loading ? (
-        <Card className="p-8"><p className="text-sm text-content-muted">Loading {monthLabel(year, month)}…</p></Card>
+        <Card className="p-8"><p className="text-sm text-content-muted">Loading {rangeLabel(from, to)}…</p></Card>
       ) : (
         <>
           <SlotManager key={`slot-${selIdx}-${selView?.slot?.id ?? "new"}`}
             idx={selIdx} slotView={selView} employees={employees}
             slotViews={slotViews} privileged={privileged} tt={tt} />
           {selView && (
-            <TechMonth key={`${selView.slot.id}-${year}-${month}`}
-              view={selView} privileged={privileged} year={year} month={month} tt={tt} />
+            <TechGrid key={`${selView.slot.id}-${from}-${to}`}
+              view={selView} privileged={privileged} from={from} to={to}
+              isMonth={isMonth} tt={tt} />
           )}
         </>
       )}
@@ -100,14 +83,14 @@ export function TechTrackerView({ store }) {
 
       {privileged && (
         <RateEditor slotViews={slotViews} ratesByEmp={tt.ratesByEmp}
-          defaultDate={`${year}-${pad2(month)}-01`} onSave={tt.saveRate} />
+          defaultDate={from} onSave={tt.saveRate} />
       )}
     </div>
   );
 }
 
 // ---- Store summary strip -------------------------------------------------
-function StoreStrip({ s, privileged, year, month }) {
+function StoreStrip({ s, privileged, from, to }) {
   const Tile = ({ label, value, locked }) => (
     <div className="rounded-lg border border-hairline bg-surface-card px-3 py-2">
       <div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-content-muted">
@@ -118,7 +101,7 @@ function StoreStrip({ s, privileged, year, month }) {
   );
   return (
     <div className="mb-4">
-      <h3 className="pgw-display mb-2 text-sm font-bold text-content-primary">{monthLabel(year, month)} store totals</h3>
+      <h3 className="pgw-display mb-2 text-sm font-bold text-content-primary">{rangeLabel(from, to)} store totals</h3>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <Tile label="Labor Sales" value={money(s.laborSales)} />
         <Tile label="Flag Hours" value={numOrDash(s.flagHours)} />
@@ -134,8 +117,21 @@ function StoreStrip({ s, privileged, year, month }) {
   );
 }
 
-// ---- Per-technician monthly grid -----------------------------------------
-function TechMonth({ view, privileged, year, month, tt }) {
+// ---- Per-technician grid -------------------------------------------------
+// Two layouts, one grid.
+//
+//   * A range that is exactly one calendar month keeps the Sunday–Saturday
+//     WEEK BLOCKS the tech sheet is built around, because that is the shape
+//     the people using it know.
+//   * Any other range renders a FLAT DAY LIST with a single totals row. An
+//     arbitrary span does not divide into a month of week blocks, and
+//     pretending otherwise would either invent empty weeks or hide days.
+//
+// The pay engine is identical either way: every week is computed over its
+// whole seven days, so a range that clips a week never produces half-week
+// overtime. A clipped week's totals are labelled PARTIAL, because they
+// describe more days than the range asked for.
+function TechGrid({ view, privileged, from, to, isMonth, tt }) {
   const gridRef = useRef(null);
   const slotId = view.slot.id;
 
@@ -179,29 +175,20 @@ function TechMonth({ view, privileged, year, month, tt }) {
             {payCols && <><th className={th}>Guar Pay</th><th className={th}>Commission</th><th className={th}>O/T</th><th className={th}>Total Pay</th></>}
           </tr>
         </thead>
-        {view.weeks.map((wk, wi) => (
-          <tbody key={wk.weekStart}>
-            <tr>
-              <td colSpan={payCols ? 10 : 6} className="border-b border-hairline bg-surface-inverse/5 px-2 py-1 text-[11px] font-semibold text-content-secondary">
-                Week {wi + 1}
-                {wk.countdown > 0 && (
-                  <span className="ml-2 font-normal text-content-muted">
-                    · Tech will be on overtime in {numOrDash(wk.countdown)} more worked hours
-                  </span>
-                )}
-              </td>
-            </tr>
-            {wk.days.map((d, di) => {
-              const iso = addDays(wk.weekStart, di);
-              const wd = inMonth(iso, year, month) ? dayOfMonth(iso) : "";
-              const dow = DOW[new Date(iso + "T00:00:00").getDay()];
+        {/* FLAT DAY LIST — any range that is not exactly one calendar
+            month. Only the days the range asked for are drawn, but each
+            one's figures come from a week the engine computed in full. */}
+        {!isMonth && (
+          <tbody>
+            {view.weeks.flatMap((wk) => wk.days.filter((d) => d.inRange)).map((d) => {
+              const dow = DOW[new Date(d.iso + "T00:00:00").getDay()];
               return (
-                <tr key={iso} className="hover:bg-surface-overlay/40">
-                  <td className={td + " text-left text-content-muted"}>{wd}</td>
+                <tr key={d.iso} className="hover:bg-surface-overlay/40">
+                  <td className={td + " text-left text-content-muted"}>{d.iso.slice(5)}</td>
                   <td className={td + " text-left text-content-muted"}>{dow}</td>
-                  <td className={td + " p-0"}>{editable(iso, "hours_worked", d.hours)}</td>
-                  <td className={td + " p-0"}>{editable(iso, "flag_hours", d.flag)}</td>
-                  <td className={td + " p-0"}>{editable(iso, "labor_sales", d.labor)}</td>
+                  <td className={td + " p-0"}>{editable(d.iso, "hours_worked", d.hours)}</td>
+                  <td className={td + " p-0"}>{editable(d.iso, "flag_hours", d.flag)}</td>
+                  <td className={td + " p-0"}>{editable(d.iso, "labor_sales", d.labor)}</td>
                   <td className={td + " text-content-secondary"}>{d.elr ? money(d.elr) : "—"}</td>
                   {payCols && <>
                     <td className={td}>{money(d.guaranteePay)}</td>
@@ -212,9 +199,55 @@ function TechMonth({ view, privileged, year, month, tt }) {
                 </tr>
               );
             })}
-            {/* weekly totals */}
+          </tbody>
+        )}
+
+        {/* WEEK BLOCKS — a whole calendar month keeps the tech sheet's
+            familiar Sunday–Saturday shape. */}
+        {isMonth && view.weeks.map((wk, wi) => (
+          <tbody key={wk.weekStart}>
+            <tr>
+              <td colSpan={payCols ? 10 : 6} className="border-b border-hairline bg-surface-inverse/5 px-2 py-1 text-[11px] font-semibold text-content-secondary">
+                Week {wi + 1}
+                {wk.partial && (
+                  <span className="ml-2 font-normal text-content-muted">· week extends beyond the range</span>
+                )}
+                {wk.countdown > 0 && (
+                  <span className="ml-2 font-normal text-content-muted">
+                    · Tech will be on overtime in {numOrDash(wk.countdown)} more worked hours
+                  </span>
+                )}
+              </td>
+            </tr>
+            {wk.days.map((d) => {
+              const dow = DOW[new Date(d.iso + "T00:00:00").getDay()];
+              // A day outside the selected month is greyed rather than
+              // hidden: the week is real and its hours count toward the
+              // week's overtime, so removing it would misrepresent the row.
+              return (
+                <tr key={d.iso} className={"hover:bg-surface-overlay/40 " + (d.inRange ? "" : "opacity-45")}>
+                  <td className={td + " text-left text-content-muted"}>{d.inRange ? dayOfMonth(d.iso) : ""}</td>
+                  <td className={td + " text-left text-content-muted"}>{dow}</td>
+                  <td className={td + " p-0"}>{editable(d.iso, "hours_worked", d.hours)}</td>
+                  <td className={td + " p-0"}>{editable(d.iso, "flag_hours", d.flag)}</td>
+                  <td className={td + " p-0"}>{editable(d.iso, "labor_sales", d.labor)}</td>
+                  <td className={td + " text-content-secondary"}>{d.elr ? money(d.elr) : "—"}</td>
+                  {payCols && <>
+                    <td className={td}>{money(d.guaranteePay)}</td>
+                    <td className={td}>{money(d.commission)}</td>
+                    <td className={td + " text-content-muted"}>—</td>
+                    <td className={td + " text-content-muted"}>—</td>
+                  </>}
+                </tr>
+              );
+            })}
+            {/* Weekly totals — always the WHOLE week, which is why a
+                clipped week says so rather than reading as the range's. */}
             <tr className="bg-surface-overlay font-semibold">
-              <td className={td + " text-left"} colSpan={2}>Week {wi + 1} total</td>
+              <td className={td + " text-left"} colSpan={2}>
+                Week {wi + 1} total
+                {wk.partial && <span className="ml-1 font-normal text-content-muted">(whole week)</span>}
+              </td>
               <td className={td}>{numOrDash(wk.hoursTotal)}</td>
               <td className={td}>{numOrDash(wk.flagTotal)}</td>
               <td className={td}>{money(wk.laborTotal)}</td>
@@ -231,7 +264,12 @@ function TechMonth({ view, privileged, year, month, tt }) {
         {payCols && m && (
           <tfoot>
             <tr className="bg-surface-inverse/10 font-bold">
-              <td className={td + " text-left"} colSpan={2}>Month totals</td>
+              <td className={td + " text-left"} colSpan={2}>
+                {isMonth ? "Month totals" : "Range totals"}
+                {view.anyPartial && (
+                  <span className="ml-1 font-normal text-content-muted">· whole weeks, so edge weeks reach past the range</span>
+                )}
+              </td>
               <td className={td}>{numOrDash(m.hoursTotal)}</td>
               <td className={td}>{numOrDash(m.flagTotal)}</td>
               <td className={td}>{money(m.laborTotal)}</td>
@@ -246,7 +284,7 @@ function TechMonth({ view, privileged, year, month, tt }) {
         {!payCols && (
           <tfoot>
             <tr className="bg-surface-inverse/10 font-bold">
-              <td className={td + " text-left"} colSpan={2}>Month totals</td>
+              <td className={td + " text-left"} colSpan={2}>{isMonth ? "Month totals" : "Range totals"}</td>
               <td className={td}>{numOrDash(view.store.hours)}</td>
               <td className={td}>{numOrDash(view.store.flag)}</td>
               <td className={td}>{money(view.store.labor)}</td>

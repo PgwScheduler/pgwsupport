@@ -147,7 +147,13 @@ function InputsPanel({ model, inputs, canEdit, onSave, onClose }) {
             <input type="number" min="0" step="0.1" className={inputCls}
               placeholder={canEdit ? "not entered" : "admin only"}
               value={vals.phone_conversion_pct} onChange={set("phone_conversion_pct")} disabled={!canEdit} />
-            {!canEdit && <span className="mt-1 block text-[11px] text-content-muted">Set by an admin.</span>}
+            {/* Stated at the point of entry, because the figure looks like
+                a performance measure and is not one. It only ever REMOVES
+                the credit-app penalty; it is never itself a deduction. */}
+            <span className="mt-1 block text-[11px] text-content-muted">
+              40% or above waives the credit app penalty. It never creates one.
+              {!canEdit && " Set by an admin."}
+            </span>
           </label>
         )}
         {model === "D" && (
@@ -341,8 +347,12 @@ export function BonusView({ store }) {
                     <p className="mt-1 text-xs text-success">Waived — {result.penalty.waiverReasons.join(", ")}.</p>
                   ) : (
                     <p className="mt-1 text-xs text-content-muted">
-                      Not deducted from the figures above. The waiver depends on phone conversion, which nothing tracks,
-                      so this is shown rather than applied. If it were applied the total would be{" "}
+                      Not deducted from the figures above — shown so the exposure is visible, never applied.
+                      It is waived by <span className="font-semibold text-content-primary">any one</span> of three
+                      things: Gold gross profit, hitting the daily car goal, or 40% phone conversion.
+                      Phone conversion is one of the ways OUT of this penalty, not a cause of it — a high
+                      conversion rate removes the penalty and can never create one.
+                      If it were applied the total would be{" "}
                       <span className="font-semibold text-content-primary">{money(result.poolIfPenaltyApplied)}</span>.
                     </p>
                   )}

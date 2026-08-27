@@ -12,6 +12,7 @@ export default {
           page: "var(--surface-page)",
           card: "var(--surface-card)",
           overlay: "var(--surface-overlay)",
+          raised: "var(--surface-raised)",
           input: "var(--surface-input)",
           stripe: "var(--surface-stripe)",
           inverse: "var(--surface-inverse)",

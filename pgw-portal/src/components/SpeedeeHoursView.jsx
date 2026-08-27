@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Printer, Plus, Trash2, Lock } from "lucide-react";
 import { usePayroll } from "../hooks/usePayroll.js";
-import { thisWeekStart, weekLabel, shiftWeek, daysForWeek } from "../lib/weekUtils.js";
+import { thisWeekStart, weekLabel, weeksInRange, daysForWeek } from "../lib/weekUtils.js";
+import { useDateRange } from "../context/DateRangeProvider.jsx";
+import { DateRangeControl } from "./DateRangeControl.jsx";
 import {
   computeSpeedeeStoreRow, computeSpeedeeRefRow, computeSpeedeeSummary,
   SPEEDEE_POSITIONS, SPEEDEE_TARGET, num,
@@ -35,7 +37,17 @@ function Th({ children, className = "" }) {
 }
 
 export function SpeedeeHoursView({ store, cutover }) {
+  // Same rule as the Midas grid: the shared range chooses which weeks are
+  // available, and the grid always renders one WHOLE week, so overtime is
+  // never computed over a fragment of the range.
+  const { from, to } = useDateRange();
+  const weekList = useMemo(() => weeksInRange(from, to, cutover), [from, to, cutover]);
   const [week, setWeek] = useState(() => thisWeekStart(cutover));
+  useEffect(() => {
+    if (!weekList.length) return;
+    if (!weekList.includes(week)) setWeek(weekList[weekList.length - 1]);
+  }, [weekList, week]);
+  const weekIdx = weekList.indexOf(week);
   const [dayMode, setDayMode] = useState("hours_worked");
   const {
     rows, dates, isDaily, privileged, rpcSummary, weekSales, loading, error,
@@ -143,12 +155,13 @@ export function SpeedeeHoursView({ store, cutover }) {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1">
-              <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, -1, cutover))}><ChevronLeft className="h-4 w-4" /></GhostBtn>
+              <GhostBtn onClick={() => setWeek(weekList[Math.max(0, weekIdx - 1)])} disabled={weekIdx <= 0} title="Previous week in range"><ChevronLeft className="h-4 w-4" /></GhostBtn>
               <div className="rounded-md border border-hairline-strong bg-surface-overlay px-3 py-2 text-sm font-medium text-content-primary">
                 Week of {weekLabel(week, cutover)}
               </div>
-              <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, 1, cutover))}><ChevronRight className="h-4 w-4" /></GhostBtn>
+              <GhostBtn onClick={() => setWeek(weekList[Math.min(weekList.length - 1, weekIdx + 1)])} disabled={weekIdx < 0 || weekIdx >= weekList.length - 1} title="Next week in range"><ChevronRight className="h-4 w-4" /></GhostBtn>
             </div>
+            <DateRangeControl />
             {isDaily && (
               <DayModeToggle modes={DAY_MODES} value={dayMode} onChange={setDayMode} />
             )}
