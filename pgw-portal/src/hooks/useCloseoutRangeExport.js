@@ -53,7 +53,11 @@ export function useCloseoutRangeExport() {
         }));
 
         // Lazy-loaded so ExcelJS (~1 MB) is code-split out of the initial bundle
-        // and only fetched when a user actually exports a workbook.
+        // and only fetched when a user actually exports a workbook. This only
+        // holds while EVERY workbook module is import()ed this way — one static
+        // import anywhere in the App tree puts ExcelJS back in the entry chunk
+        // for everyone. The other two are in useReportBuilder.js and
+        // ScheduleView.jsx; vite.config.js pins the shared copy to its own chunk.
         const { exportAllCloseoutsWorkbook } = await import("../lib/closeoutWorkbook.js");
         await exportAllCloseoutsWorkbook(closeouts, { startDate: from, endDate: to, accessibleStores });
         return { count: closeouts.length };
