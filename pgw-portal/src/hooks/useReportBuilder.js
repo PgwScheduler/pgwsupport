@@ -265,6 +265,9 @@ export function useReportBuilder() {
         ? stores.filter((s) => spec.storeIds.includes(s.id) && !present.has(s.id))
         : [];
 
+      // Lazy-loaded to keep ExcelJS (~1 MB) out of the entry chunk — see the
+      // note in useCloseoutRangeExport.js; all three workbooks share one copy,
+      // so this only works if none of them is imported statically.
       const { exportReportWorkbook } = await import("../lib/reportWorkbook.js");
       await exportReportWorkbook({
         columns: result.columns,

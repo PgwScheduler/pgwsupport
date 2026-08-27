@@ -4,7 +4,6 @@ import { useSchedule } from "../../hooks/useSchedule.js";
 import { SectionHeader, Card, GhostBtn, T } from "../ui.jsx";
 import { inMonth, weekSummary, fmtTime, fmtHours, shortName, todayStr } from "../../lib/scheduleMath.js";
 import { shiftColorVar } from "../../lib/shiftTypes.js";
-import { downloadScheduleWorkbook } from "../../lib/scheduleWorkbook.js";
 import { DayDetailModal } from "./DayDetailModal.jsx";
 import { DuplicateMonthModal } from "./DuplicateMonthModal.jsx";
 
@@ -42,6 +41,15 @@ export function ScheduleView({ store }) {
     setExpandedWeek(null);
   };
 
+  // Lazy-loaded for the same reason as the closeout and Report Builder
+  // exports: all three workbooks share one copy of ExcelJS, so a static import
+  // anywhere in the App tree pulls it back into the entry chunk and undoes
+  // their lazy imports too. See vite.config.js for the chunk it lands in.
+  const onExport = async () => {
+    const { downloadScheduleWorkbook } = await import("../../lib/scheduleWorkbook.js");
+    await downloadScheduleWorkbook({ store, year, month, byDate, shiftTypes, typesById });
+  };
+
   const onPickMonth = (e) => {
     const [y, m] = e.target.value.split("-").map(Number);
     if (y && m) {
@@ -73,7 +81,7 @@ export function ScheduleView({ store }) {
             <GhostBtn onClick={() => setDupOpen(true)}>
               <Copy className="mr-1 inline h-3.5 w-3.5" />Duplicate month
             </GhostBtn>
-            <GhostBtn onClick={() => downloadScheduleWorkbook({ store, year, month, byDate, shiftTypes, typesById })}>
+            <GhostBtn onClick={onExport}>
               <Download className="mr-1 inline h-3.5 w-3.5" />Excel
             </GhostBtn>
           </div>
