@@ -12,6 +12,8 @@ import { DrawerView } from "./components/drawer/DrawerView.jsx";
 import { TicSheetView } from "./components/TicSheetView.jsx";
 import { TechTrackerView } from "./components/TechTrackerView.jsx";
 import { BonusView } from "./components/BonusView.jsx";
+import { ReportsView } from "./components/reports/ReportsView.jsx";
+import { canBuildReports } from "./lib/reportSpec.js";
 import { DocumentsView } from "./components/DocumentsView.jsx";
 import { TrainingView } from "./components/TrainingView.jsx";
 import { UsersView } from "./components/users/UsersView.jsx";
@@ -89,6 +91,10 @@ export default function App() {
       {view === "tic" && <TicSheetView key={"tic-" + currentStore.id} store={currentStore} />}
       {view === "techtracker" && <TechTrackerView key={"techtracker-" + currentStore.id} store={currentStore} />}
       {view === "bonus" && <BonusView key={"bonus-" + currentStore.id} store={currentStore} />}
+      {/* Not keyed to currentStore: the builder has its own multi-store
+          picker, and remounting it every time the header store changes
+          would throw away a selection the user just spent time on. */}
+      {view === "reports" && canBuildReports(profile.role) && <ReportsView />}
       {view === "documents" && <DocumentsView key={"documents-" + currentStore.id} store={currentStore} />}
       {view === "training" && <TrainingView />}
       {view === "users" && profile.role === "master" && <UsersView />}
