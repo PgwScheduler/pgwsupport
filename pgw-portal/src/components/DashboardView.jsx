@@ -4,9 +4,10 @@ import { useAuth } from "../context/AuthProvider.jsx";
 import { useDashboard } from "../hooks/useDashboard.js";
 import { computeTotals } from "../lib/drawerMath.js";
 import { money } from "../lib/format.js";
-import { thisWeekStart, weekLabel } from "../lib/weekUtils.js";
+import { weekLabel } from "../lib/weekUtils.js";
 import { Card, GhostBtn, SectionHeader } from "./ui.jsx";
 import { ExportRangeModal } from "./ExportRangeModal.jsx";
+import { PayrollToSalesCard } from "./payroll/PayrollToSalesCard.jsx";
 
 function StatCard({ label, value, sub, tone }) {
   const toneCls = tone === "pos" ? "text-success" : tone === "neg" ? "text-danger" : "text-content-primary";
@@ -19,20 +20,21 @@ function StatCard({ label, value, sub, tone }) {
   );
 }
 
-export function DashboardView({ store }) {
+export function DashboardView({ store, onNavigate }) {
   const { stores } = useAuth();
-  const { latestDrawer, weekRows, docCount, loading, error } = useDashboard(store.id);
+  const {
+    latestDrawer, weekRows, docCount, week, cutover, isDaily, payrollToSales, loading, error,
+  } = useDashboard(store.id);
   const [rangeOpen, setRangeOpen] = useState(false);
   const canExportRange = (stores?.length ?? 0) > 1;
 
   const totals = latestDrawer ? computeTotals(latestDrawer, store.drawer_float) : null;
-  const wkHours = weekRows.reduce(
-    (a, r) => a + (Number(r.clock_hours_other) || 0) + (Number(r.clock_hours) || 0), 0
-  );
-  const turned = weekRows.reduce(
-    (a, r) => a + (Number(r.hrs_turned_other) || 0) + (Number(r.hrs_turned_here) || 0), 0
-  );
-  const week = thisWeekStart();
+  // Hours arrive from payroll_week_hours already summed per employee and
+  // already resolved across the cutover — daily rows from the cutover,
+  // the frozen weekly columns before it.
+  const wkHours = weekRows.reduce((a, r) => a + (Number(r.total_hours) || 0), 0);
+  const turned = weekRows.reduce((a, r) => a + (Number(r.total_turned) || 0), 0);
+  const round1 = (n) => (n ? Math.round(n * 100) / 100 : 0);
 
   return (
     <div className="space-y-4">
@@ -63,10 +65,12 @@ export function DashboardView({ store }) {
               sub={latestDrawer ? latestDrawer.business_date : "None yet"}
               tone={!totals ? "" : totals.diff < 0 ? "neg" : totals.diff > 0 ? "pos" : ""}
             />
-            <StatCard label="Hours this week" value={wkHours || "—"} sub={weekLabel(week)} />
-            <StatCard label="Hours turned" value={turned || "—"} sub="This week" />
+            <StatCard label="Hours this week" value={round1(wkHours) || "—"} sub={week ? weekLabel(week, cutover) : ""} />
+            <StatCard label="Hours turned" value={round1(turned) || "—"} sub="This week" />
             <StatCard label="Documents" value={docCount || "—"} sub="On file" />
           </div>
+
+          <PayrollToSalesCard data={payrollToSales} onNavigate={onNavigate} isDaily={isDaily} cutover={cutover} />
 
           <Card className="p-5">
             <h3 className="pgw-display mb-3 text-sm font-bold text-content-primary">Recent activity</h3>
@@ -80,7 +84,7 @@ export function DashboardView({ store }) {
               {weekRows.length > 0 && (
                 <li className="flex items-center gap-2 text-content-secondary">
                   <Clock className="h-4 w-4 text-content-muted" />
-                  {weekRows.length} employee{weekRows.length === 1 ? "" : "s"} logged for week of {weekLabel(week)}
+                  {weekRows.length} employee{weekRows.length === 1 ? "" : "s"} logged for week of {weekLabel(week, cutover)}
                 </li>
               )}
               {!latestDrawer && weekRows.length === 0 && (

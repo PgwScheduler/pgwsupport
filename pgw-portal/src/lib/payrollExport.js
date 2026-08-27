@@ -23,16 +23,48 @@ const PAY_HEAD = [
   "Total Flat", "Bonus", "Incentives", "Paycheck",
 ];
 
-function storeCells(row) {
+// From the cutover the two weekly clock columns are replaced by one
+// column per day, Sunday first. The day columns carry HOURS WORKED — the
+// figure the sheet is read for — with turned and other-store hours kept
+// as weekly totals rather than tripling the width. "Hours From" says
+// which system a row's hours came from, so a reader of the export can
+// tell without knowing the roster who is on the Tech Tracker.
+const dailyStoreHead = (dayLabels) => [
+  "Position", "Employee", "PTO Days",
+  ...dayLabels.map(([, label]) => label),
+  "Total Hours", "Total Turned", "Other Store", "Hours From", "Productivity",
+  "Actual Sales", "Sales Required", "% of Goal", "Work Orders", "ARO", "FLAT",
+];
+
+const headFor = (dayLabels) => (dayLabels?.length ? dailyStoreHead(dayLabels) : STORE_HEAD);
+
+function storeCells(row, dates) {
   const c = computeStoreRow(row.entry);
   const e = row.entry;
+  const tail = [
+    c.productivity == null ? "—" : c.productivity.toFixed(2),
+    e.actual_sales ?? 0, e.sales_required ?? "", pct(c.pctOfGoal), e.work_orders ?? 0,
+    c.aro == null ? "—" : c.aro.toFixed(2), row.flatFlag ? "FLAT" : "",
+  ];
+
+  if (dates?.length) {
+    return [
+      posLabel(row.employee.position), row.employee.full_name || "",
+      e.pto_days ?? 0,
+      ...dates.map((d) => row.days?.[d]?.hours_worked ?? 0),
+      c.totalHours, c.totalTurned, e.total_hours_other ?? 0,
+      row.techSourced
+        ? (row.techDates?.length === dates.length ? "Tech Tracker" : "Tech Tracker (part week)")
+        : "Payroll",
+      ...tail,
+    ];
+  }
+
   return [
     posLabel(row.employee.position), row.employee.full_name || "",
     e.pto_days ?? 0, e.clock_hours_other ?? 0, e.clock_hours ?? 0, c.totalHours,
     e.hrs_turned_other ?? 0, e.hrs_turned_here ?? 0, c.totalTurned,
-    c.productivity == null ? "—" : c.productivity.toFixed(2),
-    e.actual_sales ?? 0, e.sales_required ?? "", pct(c.pctOfGoal), e.work_orders ?? 0,
-    c.aro == null ? "—" : c.aro.toFixed(2), row.flatFlag ? "FLAT" : "",
+    ...tail,
   ];
 }
 
@@ -47,10 +79,10 @@ function payCells(row) {
   ];
 }
 
-export function exportPayrollCSV(store, week, rows, privileged, summary) {
-  const head = ["Store #", "Store", "Week of", ...STORE_HEAD, ...(privileged ? PAY_HEAD : [])];
+export function exportPayrollCSV(store, week, rows, privileged, summary, dates = [], dayLabels = []) {
+  const head = ["Store #", "Store", "Week of", ...headFor(dayLabels), ...(privileged ? PAY_HEAD : [])];
   const body = rows.map((r) => [
-    store.store_number, store.name, week, ...storeCells(r), ...(privileged ? payCells(r) : []),
+    store.store_number, store.name, week, ...storeCells(r, dates), ...(privileged ? payCells(r) : []),
   ]);
 
   const lines = [head, ...body];
@@ -68,11 +100,12 @@ export function exportPayrollCSV(store, week, rows, privileged, summary) {
   downloadFile(`PGW_${store.store_number}_payroll_week_${week}.csv`, csv, "text/csv;charset=utf-8;");
 }
 
-export function printPayroll(store, week, rows, privileged, summary) {
-  const th = [...STORE_HEAD, ...(privileged ? PAY_HEAD : [])]
+export function printPayroll(store, week, rows, privileged, summary, dates = [], dayLabels = []) {
+  const storeHead = headFor(dayLabels);
+  const th = [...storeHead, ...(privileged ? PAY_HEAD : [])]
     .map((h) => `<th>${h}</th>`).join("");
   const body = rows.map((r) => {
-    const cells = [...storeCells(r), ...(privileged ? payCells(r) : [])];
+    const cells = [...storeCells(r, dates), ...(privileged ? payCells(r) : [])];
     return `<tr>${cells.map((c) => `<td>${c === "" ? "" : c}</td>`).join("")}</tr>`;
   }).join("");
 
@@ -109,7 +142,7 @@ export function printPayroll(store, week, rows, privileged, summary) {
         <div><h1>Weekly Payroll</h1><div>#${store.store_number} · ${store.name}</div></div>
         <div class="meta"><div><strong>Week of:</strong> ${week}</div><div>${privileged ? "Master / Admin copy" : "Store copy — no pay data"}</div></div>
       </div>
-      <table><tr>${th}</tr>${body || `<tr><td colspan="${STORE_HEAD.length + (privileged ? PAY_HEAD.length : 0)}">No employees</td></tr>`}</table>
+      <table><tr>${th}</tr>${body || `<tr><td colspan="${storeHead.length + (privileged ? PAY_HEAD.length : 0)}">No employees</td></tr>`}</table>
       ${summaryHtml}
     </body></html>`;
   const w = window.open("", "_blank");

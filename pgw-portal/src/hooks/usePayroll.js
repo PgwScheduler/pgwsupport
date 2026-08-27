@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../context/AuthProvider.jsx";
+import { weekEndOf, weekDates, isSundayWeek } from "../lib/weekUtils.js";
 
 const PRIVILEGED = ["admin", "master"];
 // Fields that live on the shared core table; everything else routes to the
@@ -12,11 +13,24 @@ const CORE_KEYS = ["pto_days", "clock_hours_other", "clock_hours"];
 // are fetched only for admin/master — a store never receives per-employee
 // pay in the network response. Store-visible aggregates come from the
 // brand's SECURITY DEFINER summary RPC.
-export function usePayroll(locationId, weekStart, brand) {
+//
+// From the cutover (migration 32) hours are DAILY. They are read through
+// payroll_day_hours(), which resolves each (person, day) to exactly one
+// source — tech_daily for a technician, payroll_daily for everyone else —
+// so this hook never has to merge the two itself or decide who is a
+// technician. A day whose source is 'tech' is READ-ONLY here: it is
+// entered in the Tech Tracker, and the database refuses a second copy.
+//
+// The weekly totals are summed from those day rows rather than read back
+// from payroll_week_hours, so an edit shows in the totals immediately
+// instead of after a round trip. Both compute the same figure; the RPC
+// is the authority and the grid reconciles to it on the next fetch.
+export function usePayroll(locationId, weekStart, brand, cutover) {
   const { user, role } = useAuth();
   const privileged = PRIVILEGED.includes(role);
   const isSpeedee = brand === "speedee";
   const extTable = isSpeedee ? "timesheet_speedee" : "timesheet_midas";
+  const isDaily = isSundayWeek(weekStart, cutover);
 
   const [employees, setEmployees] = useState([]);
   const [entries, setEntries] = useState([]);   // core timesheet_entries rows
@@ -27,6 +41,7 @@ export function usePayroll(locationId, weekStart, brand) {
   const [weekSales, setWeekSales] = useState(null); // store_week_sales row (speedee)
   const [rpcSummary, setRpcSummary] = useState(null);
   const [flatFlags, setFlatFlags] = useState({});
+  const [days, setDays] = useState({});      // empId -> dateIso -> day row
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -63,6 +78,28 @@ export function usePayroll(locationId, weekStart, brand) {
       }
     }
     setExt(extMap);
+
+    // Daily hours, already resolved per (person, day) to one source.
+    if (isDaily) {
+      const { data: dayRows, error: dayErr } = await supabase.rpc("payroll_day_hours", {
+        loc: locationId,
+        d_from: weekStart,
+        d_to: weekEndOf(weekStart, cutover),
+      });
+      if (dayErr) setError(dayErr.message);
+      const dm = {};
+      for (const d of dayRows ?? []) {
+        (dm[d.employee_id] ||= {})[d.work_date] = {
+          hours_worked: Number(d.hours_worked || 0),
+          hours_worked_other: Number(d.hours_worked_other || 0),
+          hours_turned: Number(d.hours_turned || 0),
+          source: d.source,
+        };
+      }
+      setDays(dm);
+    } else {
+      setDays({});
+    }
 
     // Pay tables — admin/master only.
     if (privileged) {
@@ -109,9 +146,14 @@ export function usePayroll(locationId, weekStart, brand) {
     }
 
     setLoading(false);
-  }, [locationId, weekStart, brand, privileged, isSpeedee, extTable]);
+  }, [locationId, weekStart, brand, privileged, isSpeedee, extTable, isDaily, cutover]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const dates = useMemo(
+    () => (isDaily ? weekDates(weekStart, cutover) : []),
+    [isDaily, weekStart, cutover]
+  );
 
   // One merged row per active employee; `entry` carries core + brand fields.
   const rows = useMemo(() => {
@@ -120,11 +162,39 @@ export function usePayroll(locationId, weekStart, brand) {
     return employees.map((emp) => {
       const entry = byEmp[emp.id] ?? null;
       const x = ext[emp.id] ?? null;
+      const empDays = days[emp.id] ?? {};
+
+      // A week is technician-sourced when ANY of its days came from the
+      // Tech Tracker. Resolution is per DAY, so someone who was a tech
+      // for part of the week has some days locked and some typed here —
+      // the row is marked read-only for the days that are, not wholesale.
+      const techDates = dates.filter((d) => empDays[d]?.source === "tech");
+
+      // Weekly totals, summed across whichever source each day resolved
+      // to. Overtime is computed from these downstream, once, on the
+      // week — never per day.
+      const totals = dates.reduce(
+        (a, d) => {
+          const r = empDays[d];
+          if (!r) return a;
+          a.total_hours += r.hours_worked + r.hours_worked_other;
+          a.total_hours_other += r.hours_worked_other;
+          a.total_turned += r.hours_turned;
+          return a;
+        },
+        { total_hours: 0, total_hours_other: 0, total_turned: 0 }
+      );
+
       const base = {
         position: emp.position,
+        is_store_manager: emp.is_store_manager,
         pto_days: entry?.pto_days ?? 0,
         clock_hours_other: entry?.clock_hours_other ?? 0,
         clock_hours: entry?.clock_hours ?? 0,
+        // Present ONLY in the daily era. payrollMath falls back to the
+        // frozen weekly columns when these are absent, which is what
+        // makes a pre-cutover week still render correctly.
+        ...(isDaily ? totals : {}),
       };
       const mergedEntry = isSpeedee
         ? {
@@ -150,9 +220,12 @@ export function usePayroll(locationId, weekStart, brand) {
         rate: privileged ? rates[emp.id] ?? null : null,
         pay: entry ? (privileged ? pays[entry.id] ?? null : null) : null,
         roleSalesRate: isSpeedee ? roleRates[emp.position] ?? 0 : null,
+        days: empDays,
+        techDates,
+        techSourced: techDates.length > 0,
       };
     });
-  }, [employees, entries, ext, rates, pays, roleRates, privileged, isSpeedee]);
+  }, [employees, entries, ext, rates, pays, roleRates, privileged, isSpeedee, days, dates, isDaily]);
 
   // Ensure a core row exists for (employee, week); returns it.
   const ensureEntry = useCallback(
@@ -206,6 +279,51 @@ export function usePayroll(locationId, weekStart, brand) {
     if (Object.keys(extp).length) await saveExt(employeeId, extp);
     if (!Object.keys(patch).length) await ensureEntry(employeeId);
   }, [saveCore, saveExt, ensureEntry]);
+
+  // Write one day cell. Upserts on (employee_id, work_date) — the same
+  // key the table is unique on — so repeated edits update in place.
+  //
+  // A technician's day is never written here. The UI renders those
+  // read-only, and if one somehow reached this call the database refuses
+  // it (trg_payroll_daily_no_tech_overlap, migration 32). That refusal
+  // names the person and the date, so it is surfaced verbatim rather
+  // than replaced with a generic failure — it is the more useful message.
+  const saveDay = useCallback(
+    async (employeeId, workDate, patch) => {
+      const existing = days[employeeId]?.[workDate];
+      if (existing?.source === "tech") return;
+
+      const row = {
+        location_id: locationId,
+        employee_id: employeeId,
+        work_date: workDate,
+        hours_worked: existing?.hours_worked ?? 0,
+        hours_worked_other: existing?.hours_worked_other ?? 0,
+        hours_turned: existing?.hours_turned ?? 0,
+        ...patch,
+        submitted_by: user?.id,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Optimistic: the totals row recomputes from `days`, so the week
+      // total moves with the keystroke rather than after the round trip.
+      setDays((prev) => ({
+        ...prev,
+        [employeeId]: { ...(prev[employeeId] ?? {}), [workDate]: { ...row, source: "payroll" } },
+      }));
+
+      const { error: e } = await supabase
+        .from("payroll_daily")
+        .upsert(row, { onConflict: "employee_id,work_date" });
+      if (e) {
+        setError(e.message);
+        fetchAll(); // put the optimistic cell back to what the server holds
+      } else {
+        setError(null);
+      }
+    },
+    [days, locationId, user?.id, fetchAll]
+  );
 
   const saveRate = useCallback(async (employeeId, patch) => {
     const { data, error: e } = await supabase
@@ -266,6 +384,8 @@ export function usePayroll(locationId, weekStart, brand) {
 
   return {
     rows,
+    dates,
+    isDaily,
     privileged,
     rpcSummary,
     flatFlags,
@@ -276,6 +396,7 @@ export function usePayroll(locationId, weekStart, brand) {
     updateEmployee,
     removeEmployee,
     saveEntry,
+    saveDay,
     saveRate,
     savePay,
     saveWeekSales,

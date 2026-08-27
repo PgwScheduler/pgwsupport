@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Printer, Plus, Trash2, Lock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Printer, Plus, Trash2, Lock, Wrench } from "lucide-react";
 import { usePayroll } from "../hooks/usePayroll.js";
-import { thisWeekStart, weekLabel, shiftWeek } from "../lib/weekUtils.js";
+import { usePayrollConfig } from "../hooks/usePayrollConfig.js";
+import { thisWeekStart, weekLabel, shiftWeek, daysForWeek } from "../lib/weekUtils.js";
 import {
   computeStoreRow, computePayRow, computePayrollSummary, POSITIONS, TARGETS,
 } from "../lib/payrollMath.js";
@@ -10,13 +11,40 @@ import { exportPayrollCSV, printPayroll } from "../lib/payrollExport.js";
 import { SpeedeeHoursView } from "./SpeedeeHoursView.jsx";
 import { Card, GhostBtn, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
 import { ConfirmDialog } from "./ConfirmDialog.jsx";
+import { DayCell, DayModeToggle } from "./payroll/DayCell.jsx";
 
 // The Employee Hours tab follows the store's brand — managers never toggle it.
-export function HoursView({ store }) {
+//
+// The cutover date is fetched before either grid mounts. Nothing can render
+// without it: it decides whether a week runs Sunday–Saturday or Monday–
+// Saturday, and guessing would draw the wrong day columns and then snap.
+export function HoursView({ store, onNavigate }) {
+  const { cutover, loading, error } = usePayrollConfig();
+
+  if (loading) {
+    return <p className="px-1 py-10 text-center text-sm text-content-muted">Loading…</p>;
+  }
+  if (error) {
+    return (
+      <p className="rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">
+        Could not read the payroll configuration: {error}
+      </p>
+    );
+  }
   return store.brand === "speedee"
-    ? <SpeedeeHoursView store={store} />
-    : <MidasHoursView store={store} />;
+    ? <SpeedeeHoursView store={store} cutover={cutover} />
+    : <MidasHoursView store={store} cutover={cutover} onNavigate={onNavigate} />;
 }
+
+// Which figure the seven day columns show and edit. All three are daily
+// (migration 32), but twenty-one columns would be unreadable, so one set
+// of day columns switches between them and every weekly TOTAL stays on
+// screen regardless of which is selected — nothing is hidden by the mode.
+const DAY_MODES = [
+  ["hours_worked", "Hours"],
+  ["hours_turned", "Turned"],
+  ["hours_worked_other", "Other store"],
+];
 
 // Which mutator a field routes to.
 const ENTRY_FIELDS = [
@@ -35,13 +63,17 @@ function Th({ children, className = "" }) {
   return <th className={"px-2 py-2 text-right font-medium whitespace-nowrap " + className}>{children}</th>;
 }
 
-function MidasHoursView({ store }) {
-  const [week, setWeek] = useState(() => thisWeekStart());
+function MidasHoursView({ store, cutover, onNavigate }) {
+  const [week, setWeek] = useState(() => thisWeekStart(cutover));
+  const [dayMode, setDayMode] = useState("hours_worked");
   const [pendingRemove, setPendingRemove] = useState(null); // { id, name } awaiting confirmation
   const {
-    rows, privileged, rpcSummary, flatFlags, loading, error,
-    addEmployee, updateEmployee, removeEmployee, saveEntry, saveRate, savePay,
-  } = usePayroll(store.id, week, "midas");
+    rows, dates, isDaily, privileged, rpcSummary, flatFlags, loading, error,
+    addEmployee, updateEmployee, removeEmployee, saveEntry, saveDay, saveRate, savePay,
+  } = usePayroll(store.id, week, "midas", cutover);
+
+  const dayLabels = daysForWeek(week, cutover);
+  const anyTechSourced = rows.some((r) => r.techSourced);
 
   const [ov, setOv] = useState({}); // { [employeeId]: { field: rawValue } }
   const timers = useRef({});
@@ -128,20 +160,26 @@ function MidasHoursView({ store }) {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1">
-              <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, -1))}>
+              <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, -1, cutover))}>
                 <ChevronLeft className="h-4 w-4" />
               </GhostBtn>
               <div className="rounded-md border border-hairline-strong bg-surface-overlay px-3 py-2 text-sm font-medium text-content-primary">
-                Week of {weekLabel(week)}
+                Week of {weekLabel(week, cutover)}
+                <span className="ml-1.5 text-xs font-normal text-content-muted">
+                  {isDaily ? "Sun–Sat" : "Mon–Sat"}
+                </span>
               </div>
-              <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, 1))}>
+              <GhostBtn onClick={() => setWeek((w) => shiftWeek(w, 1, cutover))}>
                 <ChevronRight className="h-4 w-4" />
               </GhostBtn>
             </div>
-            <GhostBtn onClick={() => exportPayrollCSV(store, week, merged, privileged, summary)} disabled={rows.length === 0}>
+            {isDaily && (
+              <DayModeToggle modes={DAY_MODES} value={dayMode} onChange={setDayMode} />
+            )}
+            <GhostBtn onClick={() => exportPayrollCSV(store, week, merged, privileged, summary, dates, dayLabels)} disabled={rows.length === 0}>
               <Download className="h-4 w-4" /> CSV
             </GhostBtn>
-            <GhostBtn onClick={() => printPayroll(store, week, merged, privileged, summary)} disabled={rows.length === 0}>
+            <GhostBtn onClick={() => printPayroll(store, week, merged, privileged, summary, dates, dayLabels)} disabled={rows.length === 0}>
               <Printer className="h-4 w-4" /> Print / PDF
             </GhostBtn>
           </div>
@@ -150,6 +188,33 @@ function MidasHoursView({ store }) {
 
       {error && (
         <p className="mb-3 rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>
+      )}
+
+      {/* Where a technician's hours come from, and where to change them. */}
+      {isDaily && anyTechSourced && (
+        <p className="mb-3 flex flex-wrap items-center gap-1.5 rounded-md border border-hairline-strong bg-surface-overlay px-3 py-2 text-sm text-content-secondary">
+          <Wrench className="h-4 w-4 shrink-0 text-content-muted" />
+          <span>
+            Technician hours are read from the Tech Tracker and cannot be typed here — one entry per
+            person per day, in one place. To correct them, change them in the
+          </span>
+          <button
+            onClick={() => onNavigate?.("techtracker")}
+            className="font-semibold underline underline-offset-2 hover:text-content-primary"
+          >
+            Tech Tracker
+          </button>
+          <span>and Payroll follows.</span>
+        </p>
+      )}
+
+      {/* A closed week. The database refuses edits to these hours too. */}
+      {!isDaily && (
+        <p className="mb-3 flex items-center gap-1.5 rounded-md border border-hairline-strong bg-surface-overlay px-3 py-2 text-sm text-content-secondary">
+          <Lock className="h-4 w-4 shrink-0 text-content-muted" />
+          This week pre-dates daily entry, so it keeps its weekly Monday–Saturday totals and is
+          read-only. Daily hours start {weekLabel(cutover, cutover)}.
+        </p>
       )}
 
       {/* Payroll % summary */}
@@ -173,12 +238,30 @@ function MidasHoursView({ store }) {
               <Th className="text-left">Position</Th>
               <Th className="text-left">Employee</Th>
               <Th>PTO</Th>
-              <Th>Clk Other</Th>
-              <Th>Clk Here</Th>
-              <Th>Total Hrs</Th>
-              <Th>Turn Other</Th>
-              <Th>Turn Here</Th>
+              {isDaily ? (
+                dates.map((d, i) => (
+                  <Th key={d} className={i === 0 ? "border-l border-hairline-strong" : ""}>
+                    {dayLabels[i][1]}
+                    <span className="block text-[10px] font-normal text-content-muted">
+                      {Number(d.slice(8, 10))}
+                    </span>
+                  </Th>
+                ))
+              ) : (
+                <>
+                  <Th>Clk Other</Th>
+                  <Th>Clk Here</Th>
+                </>
+              )}
+              <Th className={isDaily ? "border-l border-hairline-strong" : ""}>Total Hrs</Th>
+              {!isDaily && (
+                <>
+                  <Th>Turn Other</Th>
+                  <Th>Turn Here</Th>
+                </>
+              )}
               <Th>Total Turn</Th>
+              {isDaily && <Th>Other Str</Th>}
               <Th>Prod.</Th>
               <Th>Actual Sales</Th>
               <Th>Sales Req.</Th>
@@ -207,7 +290,7 @@ function MidasHoursView({ store }) {
               const empId = r.employee.id;
               const sc = computeStoreRow(r.mEntry);
               const pc = privileged ? computePayRow(r.mEntry, r.mRate, r.mPay) : null;
-              const isManager = r.employee.position === "manager";
+              const isSalaried = !!r.employee.is_store_manager;
               return (
                 <tr key={empId} className="odd:bg-surface-stripe hover:bg-surface-overlay">
                   <td className="px-2 py-1.5">
@@ -235,14 +318,72 @@ function MidasHoursView({ store }) {
                       }}
                       placeholder="Name"
                     />
+                    <div className="flex flex-wrap items-center gap-1">
+                      {r.techSourced && (
+                        <button
+                          onClick={() => onNavigate?.("techtracker")}
+                          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-content-secondary hover:text-content-primary"
+                          style={{ backgroundColor: T.accentSoftBg }}
+                          title={
+                            r.techDates.length === dates.length
+                              ? "Hours come from the Tech Tracker"
+                              : `Tech Tracker days: ${r.techDates.map((d) => Number(d.slice(8, 10))).join(", ")}`
+                          }
+                        >
+                          <Wrench className="h-3 w-3" /> Tech Tracker
+                        </button>
+                      )}
+                      {/* Only the GM is salaried and left out of
+                          payroll-to-sales. Assistants stay in, so this is
+                          a per-person fact, not a position. */}
+                      {r.employee.position === "manager" && privileged && (
+                        <label className="inline-flex items-center gap-1 text-[10px] text-content-muted">
+                          <input
+                            type="checkbox"
+                            checked={!!r.employee.is_store_manager}
+                            onChange={(e) =>
+                              updateEmployee(empId, { is_store_manager: e.target.checked })
+                            }
+                          />
+                          Store manager (salaried)
+                        </label>
+                      )}
+                    </div>
                   </td>
                   <NumCell {...{ empId, field: "pto_days", val, commit, server: r.mEntry.pto_days }} />
-                  <NumCell {...{ empId, field: "clock_hours_other", val, commit, server: r.mEntry.clock_hours_other }} />
-                  <NumCell {...{ empId, field: "clock_hours", val, commit, server: r.mEntry.clock_hours }} />
-                  <td className={compCell}>{numOrDash(sc.totalHours)}</td>
-                  <NumCell {...{ empId, field: "hrs_turned_other", val, commit, server: r.mEntry.hrs_turned_other }} />
-                  <NumCell {...{ empId, field: "hrs_turned_here", val, commit, server: r.mEntry.hrs_turned_here }} />
+                  {isDaily ? (
+                    dates.map((d, i) => (
+                      <DayCell
+                        key={d}
+                        empId={empId}
+                        date={d}
+                        field={dayMode}
+                        day={r.days[d]}
+                        saveDay={saveDay}
+                        first={i === 0}
+                      />
+                    ))
+                  ) : (
+                    <>
+                      {/* Frozen: pre-cutover hours are read-only in the
+                          database too, not merely disabled here. */}
+                      <td className={roCell} title="Closed week">{numOrDash(r.mEntry.clock_hours_other)}</td>
+                      <td className={roCell} title="Closed week">{numOrDash(r.mEntry.clock_hours)}</td>
+                    </>
+                  )}
+                  <td className={compCell + (isDaily ? " border-l border-hairline-strong" : "")}>
+                    {numOrDash(sc.totalHours)}
+                  </td>
+                  {!isDaily && (
+                    <>
+                      <td className={roCell} title="Closed week">{numOrDash(r.mEntry.hrs_turned_other)}</td>
+                      <td className={roCell} title="Closed week">{numOrDash(r.mEntry.hrs_turned_here)}</td>
+                    </>
+                  )}
                   <td className={compCell}>{numOrDash(sc.totalTurned)}</td>
+                  {isDaily && (
+                    <td className={compCell}>{numOrDash(r.mEntry.total_hours_other)}</td>
+                  )}
                   <td className={compCell}>{sc.productivity == null ? "—" : sc.productivity.toFixed(2)}</td>
                   <NumCell {...{ empId, field: "actual_sales", val, commit, server: r.mEntry.actual_sales }} />
                   {/* Sales Required: master edits, store sees read-only */}
@@ -266,14 +407,14 @@ function MidasHoursView({ store }) {
                     <>
                       {/* Rate / Salary */}
                       <td className="border-l border-hairline-strong px-1 py-1.5 text-right">
-                        {isManager ? (
+                        {isSalaried ? (
                           <NumCell inline field="manager_salary" empId={empId} val={val} commit={commit} server={r.mRate.manager_salary} placeholder="salary" />
                         ) : (
                           <NumCell inline field="hourly_rate" empId={empId} val={val} commit={commit} server={r.mRate.hourly_rate} />
                         )}
                       </td>
                       <td className="px-1 py-1.5 text-right">
-                        {isManager ? <span className="text-content-muted">x</span>
+                        {isSalaried ? <span className="text-content-muted">x</span>
                           : r.employee.position === "tech" ? (
                             // Techs' flat rate is authoritative in the Tech Tracker
                             // (tech_pay_rates) and synced here — read-only mirror.
@@ -282,10 +423,10 @@ function MidasHoursView({ store }) {
                             <NumCell inline field="flat_rate_per_hour" empId={empId} val={val} commit={commit} server={r.mRate.flat_rate_per_hour} />
                           )}
                       </td>
-                      <td className={compCell}>{isManager ? "x" : money(pc.hourlyEarned)}</td>
-                      <td className={compCell}>{isManager ? "x" : money(pc.otEarned)}</td>
-                      <td className={compCell}>{isManager ? "x" : money(pc.totalHourly)}</td>
-                      <td className={compCell}>{isManager ? "x" : money(pc.totalFlat)}</td>
+                      <td className={compCell}>{isSalaried ? "x" : money(pc.hourlyEarned)}</td>
+                      <td className={compCell}>{isSalaried ? "x" : money(pc.otEarned)}</td>
+                      <td className={compCell}>{isSalaried ? "x" : money(pc.totalHourly)}</td>
+                      <td className={compCell}>{isSalaried ? "x" : money(pc.totalFlat)}</td>
                       <NumCell {...{ empId, field: "bonus", val, commit, server: r.mPay.bonus }} />
                       <NumCell {...{ empId, field: "incentives", val, commit, server: r.mPay.incentives }} />
                       <td className={compCell} style={{ color: T.accentSoftText }}>{money(pc.paycheck)}</td>
@@ -302,14 +443,14 @@ function MidasHoursView({ store }) {
             })}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={privileged ? 26 : 17} className="px-4 py-10 text-center text-sm text-content-muted">
+                <td colSpan={privileged ? (isDaily ? 30 : 26) : (isDaily ? 21 : 17)} className="px-4 py-10 text-center text-sm text-content-muted">
                   No employees on the roster yet. Add one below to start the week.
                 </td>
               </tr>
             )}
             {loading && (
               <tr>
-                <td colSpan={privileged ? 26 : 17} className="px-4 py-10 text-center text-sm text-content-muted">Loading…</td>
+                <td colSpan={privileged ? (isDaily ? 30 : 26) : (isDaily ? 21 : 17)} className="px-4 py-10 text-center text-sm text-content-muted">Loading…</td>
               </tr>
             )}
           </tbody>
