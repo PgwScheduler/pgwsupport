@@ -8,8 +8,8 @@
 // The store code path never receives the inputs computePayRow needs, so
 // pay figures can't leak through the UI.
 //
-// The paycheck formula MUST stay in sync with payroll_pct_summary() in
-// pgw_employee_hours_payroll_rebuild_14.sql.
+// The paycheck formula MUST stay in sync with payroll_pct_summary(), now
+// rewritten in pgw_payroll_daily_sunday_32.sql (originally migration 14).
 // =====================================================================
 
 export const OT_THRESHOLD = 40;
@@ -55,19 +55,42 @@ export const safeDiv = (n, d) => {
   return Number.isFinite(r) ? r : null;
 };
 
+// ---- Hours, either side of the cutover --------------------------------
+// From the cutover (migration 32) hours are daily and arrive already
+// summed for the week as total_hours / total_turned, resolved per day
+// across payroll_daily and tech_daily. Before it they are the two
+// frozen weekly columns. Everything downstream reads these two helpers
+// so no formula has to know which era it is looking at.
+export const entryHours = (entry) =>
+  entry?.total_hours != null
+    ? num(entry.total_hours)
+    : num(entry?.clock_hours_other) + num(entry?.clock_hours);
+
+export const entryTurned = (entry) =>
+  entry?.total_turned != null
+    ? num(entry.total_turned)
+    : num(entry?.hrs_turned_other) + num(entry?.hrs_turned_here);
+
+// Worked at THIS store — the productivity denominator. Daily rows split
+// it the same way the weekly columns did.
+export const entryHoursHere = (entry) =>
+  entry?.total_hours != null
+    ? num(entry.total_hours) - num(entry.total_hours_other)
+    : num(entry?.clock_hours);
+
 // ---- Store-visible computed fields -----------------------------------
 // `entry` carries the store-visible timesheet columns + the employee's
 // position/name. No rates, no pay.
 export function computeStoreRow(entry) {
-  const clockHere = num(entry.clock_hours);
-  const totalHours = num(entry.clock_hours_other) + clockHere;
-  const totalTurned = num(entry.hrs_turned_other) + num(entry.hrs_turned_here);
+  const clockHere = entryHoursHere(entry);
+  const totalHours = entryHours(entry);
+  const totalTurned = entryTurned(entry);
   const isTech = entry.position === "tech";
   return {
     totalHours,
     totalTurned,
     // productivity only meaningful for techs
-    productivity: isTech ? safeDiv(entry.hrs_turned_here, clockHere) : null,
+    productivity: isTech ? safeDiv(totalTurned, clockHere) : null,
     aro: safeDiv(entry.actual_sales, entry.work_orders),
     pctOfGoal: safeDiv(entry.actual_sales, entry.sales_required),
   };
@@ -75,13 +98,22 @@ export function computeStoreRow(entry) {
 
 // ---- Master/admin pay fields -----------------------------------------
 // `rate` = employee_pay_rates row (or null); `pay` = timesheet_pay row
-// (or null). Managers are salaried: hourly/OT/flat don't apply.
+// (or null).
+//
+// SALARIED means is_store_manager, NOT position === 'manager'. The old
+// rule paid every 'manager' row a salary and never computed hourly or
+// overtime for them, which silently swept assistant managers in with the
+// GM. BDC's rule (migration 32) is that only the GM is salaried and
+// excluded from payroll-to-sales, and that assistants stay in it — which
+// is only coherent if assistants are hourly. An assistant manager needs
+// employee_pay_rates.hourly_rate set; their manager_salary is ignored.
+// MUST stay in sync with payroll_pct_summary() in migration 32.
 export function computePayRow(entry, rate, pay) {
   const bonus = num(pay?.bonus);
   const incentives = num(pay?.incentives);
-  const isManager = entry.position === "manager";
+  const isSalaried = !!entry.is_store_manager;
 
-  if (isManager) {
+  if (isSalaried) {
     const salary = num(rate?.manager_salary);
     return {
       manager: true,
@@ -102,9 +134,11 @@ export function computePayRow(entry, rate, pay) {
 
   const hourlyRate = num(rate?.hourly_rate);
   const flatRate = num(rate?.flat_rate_per_hour);
-  const totalHours = num(entry.clock_hours_other) + num(entry.clock_hours);
-  const totalTurned = num(entry.hrs_turned_other) + num(entry.hrs_turned_here);
+  const totalHours = entryHours(entry);
+  const totalTurned = entryTurned(entry);
 
+  // Overtime is WEEKLY — one 40-hour threshold on the week's total,
+  // never per day, however the hours were captured.
   const regularHours = Math.min(totalHours, OT_THRESHOLD);
   const otHours = Math.max(totalHours - OT_THRESHOLD, 0);
   const hourlyEarned = hourlyRate * regularHours;
@@ -164,7 +198,7 @@ export function computePayrollSummary(rows) {
 // for the employee's position; labor_sales is store-visible (exposed so
 // Total Incentive isn't a hidden-but-derivable figure).
 export function computeSpeedeeStoreRow(entry, roleSalesRate) {
-  const totalHours = num(entry.clock_hours_other) + num(entry.clock_hours);
+  const totalHours = entryHours(entry);
   const laborPctPay = entry.labor_pct_eligible
     ? num(entry.labor_pct_rate) * num(entry.labor_sales)
     : 0;
@@ -179,7 +213,7 @@ export function computeSpeedeeStoreRow(entry, roleSalesRate) {
 // paycheck they key in. They NEVER feed paycheck_amount.
 export function computeSpeedeeRefRow(entry, rate) {
   const hourlyRate = num(rate?.hourly_rate);
-  const totalHours = num(entry.clock_hours_other) + num(entry.clock_hours);
+  const totalHours = entryHours(entry);
   const regularHours = Math.min(totalHours, OT_THRESHOLD);
   const otHours = Math.max(totalHours - OT_THRESHOLD, 0);
   const hourlyEarned = hourlyRate * regularHours;

@@ -1,20 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
-import { thisWeekStart } from "../lib/weekUtils.js";
+import { fetchPayrollConfig } from "./usePayrollConfig.js";
+import { thisWeekStart, weekEndOf, isSundayWeek } from "../lib/weekUtils.js";
 
 export function useDashboard(locationId) {
   const [latestDrawer, setLatestDrawer] = useState(null);
   const [weekRows, setWeekRows] = useState([]);
   const [docCount, setDocCount] = useState(0);
+  const [cutover, setCutover] = useState(null);
+  const [week, setWeek] = useState(null);
+  const [pts, setPts] = useState(null);       // payroll_to_sales_wtd row
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetchAll = useCallback(async () => {
     if (!locationId) return;
     setLoading(true);
-    const week = thisWeekStart();
 
-    const [drawerRes, hoursRes, docsRes] = await Promise.all([
+    // The cutover decides which basis this week uses and therefore which
+    // Sunday-or-Monday key everything below is asked for.
+    const cfg = await fetchPayrollConfig().catch((e) => { setError(e.message); return null; });
+    const cut = cfg?.cutover ?? null;
+    const wk = thisWeekStart(cut);
+    setCutover(cut);
+    setWeek(wk);
+
+    const [drawerRes, docsRes, hoursRes, ptsRes] = await Promise.all([
       supabase
         .from("cash_drawer_closeouts")
         .select("*")
@@ -24,36 +35,27 @@ export function useDashboard(locationId) {
         .limit(1)
         .maybeSingle(),
       supabase
-        .from("timesheet_entries")
-        // hrs_turned_* moved to timesheet_midas (Speedee has none); embed it.
-        .select("clock_hours_other, clock_hours, timesheet_midas ( hrs_turned_other, hrs_turned_here )")
-        .eq("location_id", locationId)
-        .eq("week_start", week),
-      supabase
         .from("documents")
         .select("id", { count: "exact", head: true })
         .eq("location_id", locationId)
         .eq("item_type", "file"),
+      // Hours this week, resolved across the cutover: daily rows from the
+      // cutover, the frozen weekly columns before it. payroll_week_hours
+      // handles both, so the dashboard no longer reads timesheet_entries
+      // directly — post-cutover an employee can have hours and no weekly
+      // row at all, and that query would have shown zero.
+      supabase.rpc("payroll_week_hours", { loc: locationId, wk }),
+      supabase.rpc("payroll_to_sales_wtd", { loc: locationId, wk }),
     ]);
 
-    const firstError = drawerRes.error || hoursRes.error || docsRes.error;
+    const firstError = drawerRes.error || docsRes.error || hoursRes.error || ptsRes.error;
     if (firstError) setError(firstError.message);
     else setError(null);
 
     setLatestDrawer(drawerRes.data ?? null);
-    // Flatten the embedded timesheet_midas so weekRows stays a flat shape.
-    setWeekRows(
-      (hoursRes.data ?? []).map((r) => {
-        const m = Array.isArray(r.timesheet_midas) ? r.timesheet_midas[0] : r.timesheet_midas;
-        return {
-          clock_hours_other: r.clock_hours_other,
-          clock_hours: r.clock_hours,
-          hrs_turned_other: m?.hrs_turned_other ?? 0,
-          hrs_turned_here: m?.hrs_turned_here ?? 0,
-        };
-      })
-    );
     setDocCount(docsRes.count ?? 0);
+    setWeekRows(hoursRes.data ?? []);
+    setPts(Array.isArray(ptsRes.data) ? ptsRes.data[0] ?? null : ptsRes.data ?? null);
     setLoading(false);
   }, [locationId]);
 
@@ -61,5 +63,17 @@ export function useDashboard(locationId) {
     fetchAll();
   }, [fetchAll]);
 
-  return { latestDrawer, weekRows, docCount, loading, error, refetch: fetchAll };
+  return {
+    latestDrawer,
+    weekRows,
+    docCount,
+    week,
+    cutover,
+    isDaily: isSundayWeek(week, cutover),
+    weekEnd: week ? weekEndOf(week, cutover) : null,
+    payrollToSales: pts,
+    loading,
+    error,
+    refetch: fetchAll,
+  };
 }

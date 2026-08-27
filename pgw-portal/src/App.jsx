@@ -82,8 +82,8 @@ export default function App() {
 
   return (
     <Shell view={view} setView={setView}>
-      {view === "dashboard" && <DashboardView key={"dashboard-" + currentStore.id} store={currentStore} />}
-      {view === "hours" && <HoursView key={"hours-" + currentStore.id} store={currentStore} />}
+      {view === "dashboard" && <DashboardView key={"dashboard-" + currentStore.id} store={currentStore} onNavigate={setView} />}
+      {view === "hours" && <HoursView key={"hours-" + currentStore.id} store={currentStore} onNavigate={setView} />}
       {view === "schedule" && <ScheduleView key={"schedule-" + currentStore.id} store={currentStore} />}
       {view === "drawer" && <DrawerView key={"drawer-" + currentStore.id} store={currentStore} />}
       {view === "tic" && <TicSheetView key={"tic-" + currentStore.id} store={currentStore} />}
