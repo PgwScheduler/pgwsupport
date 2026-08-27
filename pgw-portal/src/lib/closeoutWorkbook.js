@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { buildCloseoutRows, round2 } from "./closeoutRows.js";
 import { computeTotals } from "./drawerMath.js";
 import { CURRENCY_FMT, QTY_FMT, TEXT_FMT } from "./excelFormats.js";
+import { GOLD, HDR, applyBorders, downloadWorkbook } from "./excelStyle.js";
 
 // Multi-store workbook: a Summary sheet plus one sheet per closeout, all built
 // from the same buildCloseoutRows() the single-store CSV uses. Each `closeout`
@@ -9,15 +10,10 @@ import { CURRENCY_FMT, QTY_FMT, TEXT_FMT } from "./excelFormats.js";
 //   .store = { store_number, name, drawer_float }  (from the joined location)
 //   .submitted_by_name                             (joined from profiles)
 
-const GOLD = "FFF5A623"; // matches T.accent (#F5A623)
-const HDR = "FFEDEDED";
+// GOLD, HDR and applyBorders now live in ./excelStyle.js, shared with the
+// Report Builder's workbook so "matching the cash drawer export" means the
+// same constants rather than a second copy of them.
 
-// Thin gridline drawn around every populated cell so the sheet prints cleanly.
-const THIN = { style: "thin", color: { argb: "FFBFBFBF" } };
-const BOX = { top: THIN, left: THIN, bottom: THIN, right: THIN };
-const applyBorders = (row, from, to) => {
-  for (let c = from; c <= to; c++) row.getCell(c).border = BOX;
-};
 // 1-based index of the last non-empty cell in a padded row (0 = all empty).
 const lastFilledCol = (cells) => {
   let last = 0;
@@ -234,17 +230,7 @@ export async function exportAllCloseoutsWorkbook(closeouts, { startDate, endDate
     : `PGW_all_closeouts_${startDate}_to_${endDate}.xlsx`;
 
   // Trigger the browser download when running in the app; no-op under Node.
-  if (typeof document !== "undefined") {
-    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fname;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
+  downloadWorkbook(buf, fname);
 
   return { buffer: buf, filename: fname };
 }

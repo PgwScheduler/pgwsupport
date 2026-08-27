@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import {
   LogOut, LayoutDashboard, GraduationCap, Banknote, Clock, CalendarDays, FileText,
-  ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound, ClipboardList, Wrench, Trophy,
+  ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound, ClipboardList, Wrench, Trophy, BarChart3,
 } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
+import { canBuildReports } from "../lib/reportSpec.js";
 import { LogoMark, T } from "./ui.jsx";
 import { StorePicker } from "./StorePicker.jsx";
 import { ChangePasswordModal } from "./ChangePasswordModal.jsx";
@@ -19,6 +20,12 @@ const NAV = [
   { key: "schedule", label: "Employee Schedule", icon: CalendarDays },
   { key: "documents", label: "Documents", icon: FileText },
 ];
+
+// Shown to whoever canBuildReports() allows — see the flag in
+// lib/reportSpec.js. Hiding the tab is only tidiness: report_build()
+// scopes and refuses on its own, so a store user who reached the screen
+// would still see exactly their own store.
+const REPORT_NAV = [{ key: "reports", label: "Reports", icon: BarChart3 }];
 
 const MASTER_NAV = [{ key: "users", label: "Users", icon: Users }];
 
@@ -61,7 +68,11 @@ export function Shell({ view, setView, children }) {
             <p className="mt-1.5 text-[11px] uppercase tracking-widest text-content-muted">Operations Portal</p>
           </div>
           <nav className="space-y-1">
-            {[...NAV, ...(role === "master" ? MASTER_NAV : [])].map((n) => {
+            {[
+              ...NAV,
+              ...(canBuildReports(role) ? REPORT_NAV : []),
+              ...(role === "master" ? MASTER_NAV : []),
+            ].map((n) => {
               const active = view === n.key;
               return (
                 <button
