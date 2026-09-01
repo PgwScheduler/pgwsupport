@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Wrench, Lock, AlertTriangle } from "lucide-r
 import { Card, SectionHeader, GhostBtn, PrimaryBtn, Empty, Field, inputCls } from "./ui.jsx";
 import { money, pct, numOrDash } from "../lib/format.js";
 import { useTechTracker } from "../hooks/useTechTracker.js";
+import { useHorizonSlots } from "../hooks/useHorizonSlots.js";
 import { rateForDate } from "../lib/techPayMath.js";
 import { useDateRange } from "../context/DateRangeProvider.jsx";
 import { DateRangeControl } from "./DateRangeControl.jsx";
@@ -22,6 +23,7 @@ export function TechTrackerView({ store }) {
 
   const tt = useTechTracker(store.id, from, to);
   const { privileged, loading, error, slotViews, storeSummary, employees, unattributed, isMonth } = tt;
+  const horizon = useHorizonSlots(store.id);
 
   const slotByIndex = useMemo(() => {
     const m = {};
@@ -47,6 +49,8 @@ export function TechTrackerView({ store }) {
       <StoreStrip s={storeSummary} privileged={privileged} from={from} to={to} />
 
       <UnattributedNotice groups={unattributed} privileged={privileged} onGoToSlot={setSelIdx} />
+
+      <HorizonHeldSlotsNotice horizon={horizon} />
 
       {/* Slot selector */}
       <div className="mb-3 flex flex-wrap gap-1.5">
@@ -396,6 +400,62 @@ function UnattributedNotice({ groups, privileged, onGoToSlot }) {
                 : "Assign a technician to the slot, then reassign with an effective date on or before the earliest day listed."}
             </p>
           )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ---- Horizon slots held by terminated technicians -------------------------
+// A STANDING indicator, not a transient one: it stays until somebody
+// releases the slot on purpose.
+//
+// Horizon addresses 20 numbered technician slots per shop and the upload
+// writes into them, so slot allocation is deliberately disciplined —
+// never-used slots are consumed before freed ones, and a rehired
+// technician takes the next slot in the queue rather than reclaiming his
+// old one. Releasing is therefore effectively irreversible, which is why
+// it is NOT wired to employees.active: an accidental termination flip
+// must not silently reorder the queue. Holding the slot is the safe
+// state. This notice is what stops "safe" turning into "forgotten".
+//
+// These slot numbers are Horizon's, NOT the Tech Tracker slot numbers
+// above — different address spaces, deliberately never joined.
+function HorizonHeldSlotsNotice({ horizon }) {
+  const { held, privileged, release, error } = horizon;
+  if (!held.length) return null;
+  return (
+    <Card className="mb-4 border-warning-border p-4">
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-content-primary">
+            {held.length} terminated technician{held.length === 1 ? "" : "s"} still{" "}
+            hold{held.length === 1 ? "s" : ""} a Horizon slot
+          </p>
+          <p className="mt-0.5 text-xs text-content-muted">
+            Holding is intentional — their history stays attributable in Horizon, and it costs
+            nothing until this store needs a 21st technician. Release only when you mean to: the
+            slot does not come back, and a rehired technician receives the next slot in the queue
+            rather than this one.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {held.map((h) => (
+              <li key={h.employee_id} className="flex items-center gap-2 text-xs text-content-secondary">
+                <span className="font-medium text-content-primary">Horizon slot {h.slot_number}</span>
+                <span>· {h.full_name || "unnamed"}</span>
+                {privileged && (
+                  <button
+                    onClick={() => release(h.employee_id)}
+                    className="ml-auto underline decoration-dotted underline-offset-2 hover:text-accent"
+                  >
+                    Release slot {h.slot_number}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {error && <p className="mt-2 text-xs text-danger">{error}</p>}
         </div>
       </div>
     </Card>
