@@ -339,12 +339,27 @@ export function BonusView({ store }) {
                   <p className="text-sm font-semibold text-content-primary">
                     Credit app penalty {money(result.penalty.amount)}
                     <span className="ml-2 text-xs font-normal uppercase tracking-wide text-warning">
-                      {result.penalty.waived ? "waived" : "not applied"}
+                      {result.penalty.waived ? "waived" : result.penalty.provisional ? "provisional" : "not applied"}
                     </span>
                   </p>
                   <p className="mt-0.5 text-xs text-content-muted">{result.penalty.note}</p>
                   {result.penalty.waived ? (
                     <p className="mt-1 text-xs text-success">Waived — {result.penalty.waiverReasons.join(", ")}.</p>
+                  ) : result.penalty.provisional ? (
+                    // Two of the three waivers are computable and neither was
+                    // met; the third has no data source. We cannot say whether
+                    // this is owed, so we do not say it is. Marking it
+                    // provisional keeps the exposure visible without asserting
+                    // a penalty the store may already have waived.
+                    <p className="mt-1 text-xs text-content-muted">
+                      <span className="font-semibold text-warning">Provisional — not confirmed.</span>{" "}
+                      Checked and not met: {result.penalty.waiversChecked.join(" and ")}. The third waiver,{" "}
+                      <span className="font-semibold text-content-primary">{result.penalty.pendingWaiver}</span>, has
+                      no data source yet, so whether this penalty is owed cannot be determined. It is not deducted
+                      from the figures above and must not be treated as final. Phone conversion is a way{" "}
+                      <span className="font-semibold text-content-primary">out</span> of this penalty, never a cause
+                      of it — 40% or above removes it entirely.
+                    </p>
                   ) : (
                     <p className="mt-1 text-xs text-content-muted">
                       Not deducted from the figures above — shown so the exposure is visible, never applied.

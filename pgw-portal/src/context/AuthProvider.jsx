@@ -12,9 +12,17 @@ const PROFILE_SELECT = `
 `;
 
 const STORE_SELECT = `
-  id, name, address, store_number, drawer_float, brand, district_id,
+  id, name, address, store_number, drawer_float, brand, district_id, is_sandbox,
   district:district_id ( id, name, region_id, region:region_id ( id, name ) )
 `;
+
+// A sandbox store holds fake data. RLS already hides it from store,
+// district and regional users, but admin and master CAN see it by
+// design, so RLS cannot protect them here. It sorts first for them —
+// store_number is null and nulls sort first — which would silently make
+// Value Service an admin's default store on every login. Selecting a
+// sandbox store has to be deliberate.
+const isSandbox = (s) => s?.is_sandbox === true;
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined); // undefined = not checked yet, null = signed out
@@ -46,7 +54,11 @@ export function AuthProvider({ children }) {
         if (profileRow?.location_id && storeRows.some((s) => s.id === profileRow.location_id)) {
           return profileRow.location_id;
         }
-        return storeRows[0]?.id ?? null;
+        // Never auto-select a sandbox store — see isSandbox above. Fall
+        // back to the full list only if every store is a sandbox, which
+        // would mean there is nothing real to land on anyway.
+        const real = storeRows.filter((s) => !isSandbox(s));
+        return (real[0] ?? storeRows[0])?.id ?? null;
       });
     } else {
       setStores([]);

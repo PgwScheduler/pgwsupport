@@ -170,6 +170,44 @@ ok("P.waivedRestoresPool",
 ok("P.noPenaltyAt35", runA({ actual: { creditApps: 35 } }).penalty.amount === 0,
    runA({ actual: { creditApps: 35 } }).penalty);
 
+// --- Provisional penalty ----------------------------------------------
+// Three waivers, one of which we cannot evaluate. When the two computable
+// ones (Gold GP, daily car goal) both fail and phone conversion is
+// unknown, "not waived" would assert something we do not know: a store
+// that actually converted 40% owes nothing. Provisional is the third
+// state — computed, displayed, marked unconfirmed, never presented as
+// final. Not the same as unfilled: the Google line is unfilled and
+// resolves to a real $0; this resolves to an unknown.
+ok("PR.unknownPhoneIsProvisional", A.penalty.provisional === true, A.penalty);
+ok("PR.provisionalIsNotWaived", A.penalty.waived === false, A.penalty);
+ok("PR.provisionalSurfaced", A.penaltyProvisional === true, A.penaltyProvisional);
+ok("PR.namesThePendingWaiver", A.penalty.pendingWaiver === "phone conversion", A.penalty.pendingWaiver);
+ok("PR.namesWhatWasChecked",
+   A.penalty.waiversChecked.includes("Gold GP") && A.penalty.waiversChecked.includes("Daily car goal"),
+   A.penalty.waiversChecked);
+ok("PR.stillNotDeducted", close(A.pool, 4579.04), A.pool);
+
+// Phone entered below the waiver: now we KNOW it is owed. Not provisional.
+const PHONE_LOW = runA({ inputs: { phone_conversion_pct: 0.39 } });
+ok("PR.knownPhoneIsNotProvisional", PHONE_LOW.penalty.provisional === false, PHONE_LOW.penalty);
+ok("PR.knownPhoneStillNotWaived", PHONE_LOW.penalty.waived === false, PHONE_LOW.penalty);
+
+// A met waiver settles it, so nothing is left pending.
+ok("PR.goldIsNotProvisional", GOLD.penalty.provisional === false, GOLD.penalty);
+ok("PR.carGoalIsNotProvisional",
+   runA({ actual: { roCount: 500 } }).penalty.provisional === false,
+   runA({ actual: { roCount: 500 } }).penalty);
+ok("PR.phoneWaiverIsNotProvisional",
+   runA({ inputs: { phone_conversion_pct: 0.42 } }).penalty.provisional === false,
+   runA({ inputs: { phone_conversion_pct: 0.42 } }).penalty);
+
+// A month at the floor owes nothing, so there is nothing to be
+// uncertain about — not provisional, despite phone being unknown.
+ok("PR.noShortfallNoProvisional",
+   runA({ actual: { creditApps: 35 } }).penalty.provisional === false &&
+   runA({ actual: { creditApps: 35 } }).penalty.amount === 0,
+   runA({ actual: { creditApps: 35 } }).penalty);
+
 // --- Part 7.6 — Model B ------------------------------------------------
 // Temple Hills #3296, July 2026: LY GP 42,323 -> gold 46,559.53,
 // silver 40,206.85 (95% of LY), no bronze, no daily car goal.

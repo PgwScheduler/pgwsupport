@@ -177,11 +177,31 @@ export function computeBonus({ model, target, tiers = [], inputs = null, actual 
     if (tier.name === "gold") waiverReasons.push("Gold GP earned");
     if (has(target?.daily_car_goal) && carsPerDay >= num(target.daily_car_goal)) waiverReasons.push("Daily car goal hit");
     if (phone != null && phone >= policyOf(policy, "phone_conversion_waiver")) waiverReasons.push("40% phone conversion");
+
+    // Three waivers, any one of which clears the penalty. Two of them —
+    // Gold GP and the daily car goal — we can evaluate. The third,
+    // phone conversion, has no tracking anywhere in the business yet.
+    //
+    // So when neither computable waiver is met and phone conversion is
+    // unknown, we do NOT know whether this penalty is owed. Saying
+    // "not waived" would state as fact something we cannot evaluate,
+    // and a store that actually converted 40% would be shown an
+    // exposure it does not have. PROVISIONAL is the honest third state:
+    // the amount is computed and displayed, marked unconfirmed, and
+    // kept out of anything presented as a settled figure.
+    // shortfall > 0 guards the degenerate case: a month at or above the
+    // floor owes nothing, so there is nothing to be uncertain about.
+    const provisional = shortfall > 0 && waiverReasons.length === 0 && phone == null;
     penalty = {
       amount: shortfall * penaltyPerApp,
       shortfall,
       waived: waiverReasons.length > 0,
       waiverReasons,
+      provisional,
+      // The waivers we could evaluate, so the UI can say what is still
+      // outstanding rather than just "unknown".
+      waiversChecked: ["Gold GP", "Daily car goal"],
+      pendingWaiver: provisional ? "phone conversion" : null,
       note: `${creditApps} apps, ${shortfall} below the floor of ${penaltyFloor}`,
     };
 
@@ -280,6 +300,11 @@ export function computeBonus({ model, target, tiers = [], inputs = null, actual 
 
   const pool = lines.reduce((s, l) => s + l.amount, 0);
   const penaltyAmount = penalty && !penalty.waived ? penalty.amount : 0;
+  // A provisional penalty is not a settled result, so nothing derived
+  // from it may be presented as one. poolIfPenaltyApplied stays a
+  // hypothetical either way; this flag is what stops the UI printing it
+  // as the figure.
+  const penaltyProvisional = Boolean(penalty?.provisional);
 
   return {
     ready,
@@ -296,8 +321,11 @@ export function computeBonus({ model, target, tiers = [], inputs = null, actual 
     lines,
     pool,
     penalty,
+    penaltyProvisional,
     // What the pool would be if the penalty were deducted. Shown beside
-    // the pool, never substituted for it.
+    // the pool, never substituted for it. When penaltyProvisional is
+    // true this is doubly hypothetical — the penalty may not be owed at
+    // all — so it must not be labelled as a final or expected total.
     poolIfPenaltyApplied: pool - penaltyAmount,
     payouts: payouts.map((p) => ({ ...p, amount: p.amount })),
     unfilled,
