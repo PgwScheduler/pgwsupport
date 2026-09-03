@@ -18,10 +18,17 @@ const STORE_SELECT = `
 
 // A sandbox store holds fake data. RLS already hides it from store,
 // district and regional users, but admin and master CAN see it by
-// design, so RLS cannot protect them here. It sorts first for them —
-// store_number is null and nulls sort first — which would silently make
-// Value Service an admin's default store on every login. Selecting a
-// sandbox store has to be deliberate.
+// design, so RLS cannot protect them here — selecting a sandbox store
+// has to be deliberate.
+//
+// This guard does NOT depend on where the sandbox lands in the list,
+// and that matters: an earlier version of this comment claimed
+// store_number being null sorts it first. It does not. Postgres orders
+// ASC as NULLS LAST, so `.order("store_number")` puts Value Service at
+// the END today (verified live 2026-09-03: index 38 of 39, with #2320
+// first and selected). Change the order clause to sort by name, or add
+// nullsFirst, and the sandbox becomes storeRows[0] — which is exactly
+// why the filter below tests the flag rather than trusting a position.
 const isSandbox = (s) => s?.is_sandbox === true;
 
 export function AuthProvider({ children }) {
