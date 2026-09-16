@@ -3,3 +3,6 @@ dist
 .env
 .env.local
 *.log
+
+# Supabase CLI scratch
+supabase/.temp/
