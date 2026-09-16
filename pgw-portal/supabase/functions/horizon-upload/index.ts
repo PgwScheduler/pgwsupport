@@ -5,8 +5,9 @@
 // POST { location_id, month: 'YYYY-MM', mode: 'send', confirm_sha256 }
 //   Authorization: Bearer <signed-in user's access token>
 //
-// WHO: admin and master for any store; a store manager for their own
-// store only (migration 46). A store manager may send the current month
+// WHO: admin and master for any store; a store, district or regional
+// manager for the stores they manage (migrations 46-47). A manager may
+// send the current month
 // or the previous one -- the end-of-day upload, plus the first working
 // day of a new month. Nobody may send a future month.
 //
@@ -18,7 +19,7 @@
 //    the fields the store workbook's macro would POST.
 //
 // preview: returns the fields (password withheld) and their SHA-256
-//   fingerprint. The password is never read. A store manager never sees
+//   fingerprint. The password is never read. A manager never sees
 //   an individual technician's pay: those fields come back hidden (the
 //   store's total labor cost stays, as elsewhere in the portal).
 //
@@ -123,11 +124,13 @@ Deno.serve(async (req) => {
   if (!v?.authorized) {
     return json(403, { error: v?.reason ?? 'Upload refused.', attempt_id: v?.attempt_id ?? null });
   }
-  const isStore = v.caller_role === 'store';
+  // Store, district and regional managers: no individual pay (the portal
+  // keeps the pay breakdown to admin and master) and recent months only.
+  const isManager = v.caller_role !== 'admin' && v.caller_role !== 'master';
 
-  // A store manager closes out today, or the last day of last month.
-  if (isStore && monthIndex(today.slice(0, 7)) - monthIndex(month) > 1) {
-    return json(403, { error: 'Store managers can send this month or last month only. Ask an admin to resend an older month.', attempt_id: v.attempt_id });
+  // A manager closes out today, or the last day of last month.
+  if (isManager && monthIndex(today.slice(0, 7)) - monthIndex(month) > 1) {
+    return json(403, { error: 'Managers can send this month or last month only. Ask an admin to resend an older month.', attempt_id: v.attempt_id });
   }
 
   const service = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
@@ -180,8 +183,8 @@ Deno.serve(async (req) => {
     field_count: out.pairs.length,
     fields_sha256: sha,
     totals: out.totals, // store-level labor cost is visible to store users elsewhere too
-    slots: slotSummary(out.pairs, out.techSlotsSent, !isStore),
-    pay_hidden: isStore,
+    slots: slotSummary(out.pairs, out.techSlotsSent, !isManager),
+    pay_hidden: isManager,
     warnings: out.warnings,
   };
 
@@ -199,7 +202,7 @@ Deno.serve(async (req) => {
       fields: out.pairs.map(([k, val]): Pair => [
         k,
         val === PASSWORD_MARKER ? '(password withheld)'
-          : isStore && /_daily_compensation\]$/.test(k) ? HIDDEN
+          : isManager && /_daily_compensation\]$/.test(k) ? HIDDEN
           : val,
       ]),
     });
@@ -220,7 +223,7 @@ Deno.serve(async (req) => {
     const recordError = await record({ purpose: 'send', fieldCount: out.pairs.length, sha, body: `Not sent: ${why}` });
     return json(403, {
       mode: 'send', sent_to_horizon: false, ...common, record_error: recordError,
-      error: isStore ? 'This store cannot send to Horizon right now. Ask an admin.' : why,
+      error: isManager ? 'This store cannot send to Horizon right now. Ask an admin.' : why,
     });
   }
   const c = creds[0];

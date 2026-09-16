@@ -2,11 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../context/AuthProvider.jsx";
 
-// Roles the horizon-upload Edge Function accepts (migration 46). A store
-// manager only ever reaches their own store; the function and the
+// Roles the horizon-upload Edge Function accepts (migrations 46-47). A
+// manager only ever reaches the stores they manage; the function and the
 // database both enforce that, this list only decides whether the button
-// is shown. District and regional are not included yet.
-export const HORIZON_UPLOAD_ROLES = ["store", "admin", "master"];
+// is shown.
+export const HORIZON_UPLOAD_ROLES = ["store", "district", "regional", "admin", "master"];
 
 // supabase.functions.invoke puts a non-2xx reply on error.context (a
 // Response). Read the function's own { error } message from it; fall
