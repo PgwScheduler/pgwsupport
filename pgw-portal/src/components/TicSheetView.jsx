@@ -1,8 +1,10 @@
 import React, { useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Target, X, Lock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Target, X, Lock, Send } from "lucide-react";
 import { useMonthlyTicSheet } from "../hooks/useMonthlyTicSheet.js";
 import { useMonthlyGoals } from "../hooks/useMonthlyGoals.js";
 import { useAuth } from "../context/AuthProvider.jsx";
+import { useHorizonUpload } from "../hooks/useHorizonUpload.js";
+import { HorizonSendModal, LastUploadLine } from "./HorizonSendModal.jsx";
 import { SectionHeader, Card, PrimaryBtn, GhostBtn, Empty, inputCls, T } from "./ui.jsx";
 import { money, moneyCell, pct, numOrDash } from "../lib/format.js";
 import { computeTicSheet, daySales, dayPotential } from "../lib/ticSheetMath.js";
@@ -226,6 +228,9 @@ export function TicSheetView({ store }) {
 
   const [detailDate, setDetailDate] = useState(null);
   const [cellError, setCellError] = useState(null);
+  const monthYm = `${year}-${pad2(month)}`;
+  const horizon = useHorizonUpload(store.id, monthYm);
+  const [showHorizon, setShowHorizon] = useState(false);
   const gridRef = useRef(null);
   const goalsTimer = useRef(null);
 
@@ -353,9 +358,14 @@ export function TicSheetView({ store }) {
     <div>
       <SectionHeader
         title="Daily Tic Sheet"
-        subtitle={`#${store.store_number} · ${store.name}`}
+        subtitle={store.store_number ? `#${store.store_number} · ${store.name}` : store.name}
         action={
           <div className="flex items-center gap-2">
+            {horizon.canUse && (
+              <PrimaryBtn onClick={() => setShowHorizon(true)} className="mr-2">
+                <Send className="h-4 w-4" /> Send to Horizon
+              </PrimaryBtn>
+            )}
             <GhostBtn onClick={() => shiftMonth(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></GhostBtn>
             <input type="month" value={`${year}-${pad2(month)}`} max={`${now.getFullYear()}-${pad2(now.getMonth() + 1)}`}
               onChange={onPickMonth}
@@ -364,6 +374,11 @@ export function TicSheetView({ store }) {
           </div>
         }
       />
+
+      {horizon.canUse && <div className="-mt-2 mb-3"><LastUploadLine last={horizon.lastUpload} /></div>}
+      {showHorizon && (
+        <HorizonSendModal store={store} monthYm={monthYm} upload={horizon} onClose={() => setShowHorizon(false)} />
+      )}
 
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
       {cellError && <p className="mb-3 text-sm text-danger">{cellError}</p>}

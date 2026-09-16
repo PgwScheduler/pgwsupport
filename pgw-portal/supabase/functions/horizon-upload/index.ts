@@ -3,30 +3,37 @@
 //
 // POST { location_id, month: 'YYYY-MM', mode: 'preview' }
 // POST { location_id, month: 'YYYY-MM', mode: 'send', confirm_sha256 }
-//   Authorization: Bearer <signed-in admin's access token>
+//   Authorization: Bearer <signed-in user's access token>
+//
+// WHO: admin and master for any store; a store manager for their own
+// store only (migration 46). A store manager may send the current month
+// or the previous one -- the end-of-day upload, plus the first working
+// day of a new month. Nobody may send a future month.
 //
 // Both modes:
-// 1. The CALLER's session runs horizon_upload_target(): role check, the
-//    sandbox-only switch, shop number, pairing and Front Staff. The
-//    attempt is logged under that admin. A refusal stops here.
+// 1. The CALLER's session runs horizon_upload_target(purpose): role and
+//    store checks, the sandbox-only switch (sends only), shop number,
+//    pairing and Front Staff. The attempt is logged under that user.
 // 2. The service-role client reads the store-month and builds exactly
 //    the fields the store workbook's macro would POST.
 //
 // preview: returns the fields (password withheld) and their SHA-256
-//   fingerprint. The password is never read. Recorded as a preview.
+//   fingerprint. The password is never read. A store manager never sees
+//   an individual technician's pay: those fields come back hidden (the
+//   store's total labor cost stays, as elsewhere in the portal).
 //
-// send: the rebuilt fields must have the fingerprint the admin approved
-//   (confirm_sha256) or nothing happens -- data that changed after the
-//   preview is never sent unseen. Only then is the password released
-//   (once, for this attempt), the body posted to Horizon, and Horizon's
-//   reply recorded. The password is never returned or logged.
+// send: the rebuilt fields must have the fingerprint that was approved
+//   (confirm_sha256) or nothing happens. Only then is the password
+//   released (once, for an attempt that asked to send), the body posted
+//   to Horizon, and Horizon's reply recorded. Horizon answers HTTP 200
+//   even when it refuses, so a reply starting "Error" is a failure.
 //
 // Deployed with --no-verify-jwt: the project signs sessions with the
 // new asymmetric keys, so the token is checked here (auth.getUser) and
 // again by PostgREST when the caller's session runs the upload check.
 // =====================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { buildPayload, encodeBody, fieldsDigest, PASSWORD_MARKER } from './payload.ts';
+import { buildPayload, encodeBody, fieldsDigest, PASSWORD_MARKER, type Pair } from './payload.ts';
 import { loadStoreMonth } from './load.ts';
 import { sendToHorizon } from './transport.ts';
 
@@ -42,9 +49,37 @@ const json = (status: number, body: unknown) =>
 // The store's calendar day, which is what the macro's Date means.
 const storeToday = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+const monthIndex = (ym: string) => { const [y, m] = ym.split('-').map(Number); return y * 12 + (m - 1); };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/;
+const HIDDEN = '(hidden)';
+
+// Per-slot month totals for the review screen, read back from the fields
+// themselves so the screen shows exactly what is sent.
+function slotSummary(pairs: Pair[], slots: number, showPay: boolean) {
+  const sums = new Map<string, number>();
+  let monthly = '';
+  for (const [k, v] of pairs) {
+    const d = k.match(/^data\[kpi\]\[\d+\]\[kpi_tech_(\d+)_(hours_worked|hours_sold|labor_sales|daily_compensation)\]$/);
+    if (d) sums.set(`${d[1]}|${d[2]}`, (sums.get(`${d[1]}|${d[2]}`) ?? 0) + Number(v || 0));
+    else if (!monthly) { const m = k.match(/^(data\[monthly\]\[\d+\])/); if (m) monthly = m[1]; }
+  }
+  const names = new Map(pairs.filter(([k]) => k.startsWith(monthly)).map(([k, v]) => [k, v]));
+  const r2 = (x: number) => Math.round(x * 100) / 100;
+  return Array.from({ length: slots }, (_, i) => {
+    const n = i + 1;
+    const g = (f: string) => r2(sums.get(`${n}|${f}`) ?? 0);
+    return {
+      slot: n,
+      name: names.get(`${monthly}[kpi_tech_${n}_name]`) ?? '',
+      hours_worked: g('hours_worked'),
+      hours_sold: g('hours_sold'),
+      labor_sales: g('labor_sales'),
+      compensation: showPay ? g('daily_compensation') : null,
+    };
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -62,6 +97,10 @@ Deno.serve(async (req) => {
   if (mode === 'send' && !(confirm_sha256 && SHA256.test(confirm_sha256))) {
     return json(400, { error: 'A send needs confirm_sha256: the fingerprint of the preview you approved. Run a preview first.' });
   }
+  const today = storeToday();
+  if (monthIndex(month) > monthIndex(today.slice(0, 7))) {
+    return json(400, { error: 'That month has not started yet.' });
+  }
 
   const url = Deno.env.get('SUPABASE_URL')!;
   const asCaller = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -72,7 +111,10 @@ Deno.serve(async (req) => {
   if (whoErr || !who?.user) return json(401, { error: 'Your session is not valid. Sign in again.' });
 
   // 1. The upload check, as the caller.
-  const { data: verdicts, error: gateErr } = await asCaller.rpc('horizon_upload_target', { p_location_id: location_id });
+  const { data: verdicts, error: gateErr } = await asCaller.rpc('horizon_upload_target', {
+    p_location_id: location_id,
+    p_purpose: mode,
+  });
   if (gateErr) {
     const status = gateErr.code === '42501' ? 403 : gateErr.code === '42704' ? 404 : 500;
     return json(status, { error: gateErr.message });
@@ -80,6 +122,12 @@ Deno.serve(async (req) => {
   const v = verdicts?.[0];
   if (!v?.authorized) {
     return json(403, { error: v?.reason ?? 'Upload refused.', attempt_id: v?.attempt_id ?? null });
+  }
+  const isStore = v.caller_role === 'store';
+
+  // A store manager closes out today, or the last day of last month.
+  if (isStore && monthIndex(today.slice(0, 7)) - monthIndex(month) > 1) {
+    return json(403, { error: 'Store managers can send this month or last month only. Ask an admin to resend an older month.', attempt_id: v.attempt_id });
   }
 
   const service = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
@@ -102,15 +150,21 @@ Deno.serve(async (req) => {
   // 2. Build, with the service role (pay rates are admin-only data).
   let out: ReturnType<typeof buildPayload>;
   let sha: string;
+  let sendEnabled = false;
   try {
     const input = await loadStoreMonth(service, location_id, month);
     out = buildPayload({
       ...input,
       shopNumber: v.shop_number,
       frontStaffSlot: v.front_staff_slot,
-      today: storeToday(),
+      today,
     });
     sha = await fieldsDigest(out.pairs);
+    const [{ data: loc }, { data: cfg }] = await Promise.all([
+      service.from('locations').select('is_sandbox').eq('id', location_id).single(),
+      service.from('horizon_config').select('upload_sandbox_only').eq('id', true).maybeSingle(),
+    ]);
+    sendEnabled = loc?.is_sandbox === true || cfg?.upload_sandbox_only === false;
   } catch (e) {
     return json(500, { error: e instanceof Error ? e.message : String(e), attempt_id: v.attempt_id });
   }
@@ -121,10 +175,13 @@ Deno.serve(async (req) => {
     shop_number: v.shop_number,
     month,
     days_sent: out.days,
+    last_day_sent: out.days > 0 ? `${month}-${String(out.days).padStart(2, '0')}` : null,
     tech_slots_sent: out.techSlotsSent,
     field_count: out.pairs.length,
     fields_sha256: sha,
-    totals: out.totals,
+    totals: out.totals, // store-level labor cost is visible to store users elsewhere too
+    slots: slotSummary(out.pairs, out.techSlotsSent, !isStore),
+    pay_hidden: isStore,
     warnings: out.warnings,
   };
 
@@ -133,10 +190,18 @@ Deno.serve(async (req) => {
     return json(200, {
       mode: 'preview',
       sent_to_horizon: false,
+      send_enabled: sendEnabled,
+      send_disabled_reason: sendEnabled ? null
+        : 'Sending to Horizon from the portal is not switched on yet. Keep sending from your workbook for now.',
       ...common,
       record_error: recordError,
       approx_body_bytes: encodeBody(out.pairs, '').length,
-      fields: out.pairs.map(([k, val]) => [k, val === PASSWORD_MARKER ? '(password withheld)' : val]),
+      fields: out.pairs.map(([k, val]): Pair => [
+        k,
+        val === PASSWORD_MARKER ? '(password withheld)'
+          : isStore && /_daily_compensation\]$/.test(k) ? HIDDEN
+          : val,
+      ]),
     });
   }
 
@@ -145,7 +210,7 @@ Deno.serve(async (req) => {
     const recordError = await record({ purpose: 'send', fieldCount: out.pairs.length, sha, body: 'Not sent: the fields changed after the approved preview.' });
     return json(409, {
       mode: 'send', sent_to_horizon: false, ...common, record_error: recordError,
-      error: 'The data changed since the preview you approved, so nothing was sent. Run a new preview and check it.',
+      error: 'The numbers changed since you reviewed them, so nothing was sent. Review them again.',
     });
   }
 
@@ -153,13 +218,16 @@ Deno.serve(async (req) => {
   if (credErr || !creds?.[0]?.password) {
     const why = credErr?.message ?? 'No credentials came back.';
     const recordError = await record({ purpose: 'send', fieldCount: out.pairs.length, sha, body: `Not sent: ${why}` });
-    return json(403, { mode: 'send', sent_to_horizon: false, ...common, record_error: recordError, error: why });
+    return json(403, {
+      mode: 'send', sent_to_horizon: false, ...common, record_error: recordError,
+      error: isStore ? 'This store cannot send to Horizon right now. Ask an admin.' : why,
+    });
   }
   const c = creds[0];
   // The release re-checked everything; it must agree with the gate.
   if (c.shop_number !== v.shop_number || c.front_staff_slot !== v.front_staff_slot || c.location_id !== location_id) {
     const recordError = await record({ purpose: 'send', fieldCount: out.pairs.length, sha, body: 'Not sent: the released credentials did not match the authorized attempt.' });
-    return json(409, { mode: 'send', sent_to_horizon: false, ...common, record_error: recordError, error: 'The released credentials did not match the authorized attempt. Nothing was sent.' });
+    return json(409, { mode: 'send', sent_to_horizon: false, ...common, record_error: recordError, error: 'The store\'s Horizon details did not match. Nothing was sent. Ask an admin.' });
   }
 
   // The macro sends Trim(B2). A secret pasted into Vault can carry a
