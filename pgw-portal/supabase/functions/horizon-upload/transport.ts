@@ -28,7 +28,7 @@ const MACRO_USERNAME = 'username';
 const TIMEOUT_MS = 60_000;
 
 export type SendResult = {
-  ok: boolean;                        // HTTP 200, the macro's test
+  ok: boolean;                        // HTTP 200 and the reply is not "Error..."
   status: number | null;              // null = no reply at all
   authTier: 'none' | 'username' | null;
   body: string;                       // Horizon's reply, or the network error
@@ -65,8 +65,12 @@ export async function sendToHorizon(encodedBody: string, fetchImpl: FetchLike = 
     tier = 'username';
     r = await attempt(tier);
   }
+  // A 200 is NOT enough. Horizon answers a wrong shop password with
+  // HTTP 200 and the text "Error: Password not accepted." (seen on the
+  // first sandbox send, 2026-09-16). The macro would have shown that
+  // text in its success box; here a reply starting "Error" is a failure.
   return {
-    ok: r.status === 200,
+    ok: r.status === 200 && !/^\s*error\b/i.test(r.text),
     status: r.status,
     authTier: r.status === null ? null : tier,
     body: r.status === 401

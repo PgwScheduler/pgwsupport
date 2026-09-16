@@ -162,7 +162,12 @@ Deno.serve(async (req) => {
     return json(409, { mode: 'send', sent_to_horizon: false, ...common, record_error: recordError, error: 'The released credentials did not match the authorized attempt. Nothing was sent.' });
   }
 
-  const result = await sendToHorizon(encodeBody(out.pairs, c.password));
+  // The macro sends Trim(B2). A secret pasted into Vault can carry a
+  // stray space or line break, so surrounding whitespace is dropped too;
+  // the reply says only WHETHER that happened, never the password.
+  const password = String(c.password).trim();
+  const passwordWasTrimmed = password !== c.password;
+  const result = await sendToHorizon(encodeBody(out.pairs, password));
   const recordError = await record({
     purpose: 'send', fieldCount: out.pairs.length, sha,
     authTier: result.authTier, status: result.status, body: result.body,
@@ -176,6 +181,7 @@ Deno.serve(async (req) => {
     horizon_reply: result.body.slice(0, 4000),
     auth_tier: result.authTier,
     tries: result.tries,
+    password_was_trimmed: passwordWasTrimmed,
     record_error: recordError,
   });
 });
