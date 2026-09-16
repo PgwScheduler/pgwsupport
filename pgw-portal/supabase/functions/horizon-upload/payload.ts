@@ -90,6 +90,15 @@ export function vbUrlEncode(s: string): string {
   return out;
 }
 
+// Fingerprint of the fields with the password still a marker, so it
+// never depends on the password. A send must quote the fingerprint of
+// the preview that was approved.
+export async function fieldsDigest(pairs: Pair[]): Promise<string> {
+  const bytes = new TextEncoder().encode(JSON.stringify(pairs));
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export function encodeBody(pairs: Pair[], password: string): string {
   return pairs
     .map(([k, v]) => vbUrlEncode(k) + '=' + vbUrlEncode(v === PASSWORD_MARKER ? password : v))
