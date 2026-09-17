@@ -86,6 +86,8 @@ export function RangeWidgets({ metrics, payroll, from, to }) {
 
   const gp = m.gross_profit == null ? null : Number(m.gross_profit);
   const gpPct = m.gross_profit_pct == null ? null : Number(m.gross_profit_pct);
+  // `groupon` kept its column name in migration 48; it holds Adjustments.
+  const adjustments = Number(m.groupon || 0);
   const ptsRatio = p.payroll_to_sales == null ? null : Number(p.payroll_to_sales);
   const hasWindow = !!p.window_end;
   // The whole range predates daily payroll entry, so payroll_to_sales_range
@@ -107,7 +109,10 @@ export function RangeWidgets({ metrics, payroll, from, to }) {
       <Widget
         label="Gross profit"
         value={gp == null ? "—" : money(gp)}
-        sub={gpPct == null ? null : `${pct(gpPct)} of sales`}
+        // Migration 49: this includes Adjustments, so the denominator is
+        // Sales + Adjustments and says so whenever there are any. The
+        // Sales widget beside it is still the tic sheet's Sales.
+        sub={gpPct == null ? null : `${pct(gpPct)} of sales${adjustments ? " + adjustments" : ""}`}
         from={from}
         to={to}
       >
@@ -116,6 +121,11 @@ export function RangeWidgets({ metrics, payroll, from, to }) {
         {m.labor_cost != null && (
           <p className="mt-1 text-[11px] text-content-muted">
             after {money(m.labor_cost)} technician labour
+          </p>
+        )}
+        {!!adjustments && (
+          <p className="mt-1 text-[11px] text-content-muted">
+            includes {money(adjustments)} adjustments
           </p>
         )}
       </Widget>
