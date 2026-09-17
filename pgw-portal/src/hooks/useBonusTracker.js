@@ -48,7 +48,10 @@ export function useBonusTracker(store, year, month) {
         supabase.from("bonus_model_rates").select("model, tier, role, pct"),
         supabase.from("bonus_model_splits").select("model, role, share, sort_order"),
         supabase.from("bonus_policy").select("key, value, note"),
-        supabase.from("bonus_flags").select("code, severity, summary, detail, scope_location_id"),
+        // Answered questions stay in the table as the record of the
+        // decision (migration 50); only open ones reach the screen.
+        supabase.from("bonus_flags").select("code, severity, summary, detail, scope_location_id")
+          .is("resolved_at", null),
         supabase.from("daily_kpi").select(KPI_SUM_SELECT)
           .eq("location_id", locationId).gte("business_date", start).lte("business_date", end),
         supabase.rpc("tech_store_month", { loc: locationId, month_start: start }),

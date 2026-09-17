@@ -404,7 +404,7 @@ export function BonusView({ store }) {
             {plan === "B" && (
               <p className="border-t border-hairline px-5 py-2.5 text-xs text-content-muted">
                 <Lock className="mr-1 inline h-3 w-3" />
-                The 6% GP improvement bonus is assumed to go to the store manager — the handout does not name a recipient.
+                The 6% GP improvement bonus goes to the store manager — confirmed 2026-09-17, since the handout does not name a recipient.
               </p>
             )}
           </Card>

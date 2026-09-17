@@ -217,7 +217,7 @@ export function computeBonus({ model, target, tiers = [], inputs = null, actual 
     // "Grow GP by 10.01% over LY" is read as clearing the seeded gold
     // threshold — the same rung that pays the higher rate. The handout
     // floors that column at 35,000, so the two can differ in a weak
-    // month; flagged for BDC rather than resolved here.
+    // month. CONFIRMED by the user 2026-09-17 (migration 50).
     const grew = tier.name === "gold";
     const mgrRate = tier.name === "none" ? 0 : rateFor(rates, "B", tier.name, "manager");
     const asstRate = tier.name === "none" ? 0 : rateFor(rates, "B", tier.name, "assistant");
@@ -229,9 +229,11 @@ export function computeBonus({ model, target, tiers = [], inputs = null, actual 
 
     const improvementPct = policyOf(policy, "model_b_improvement_pct");
     const improvement = lastYear == null ? 0 : improvementPct * Math.max(0, proj - lastYear);
-    lines.push(line("improvement", `GP improvement over last year (${(improvementPct * 100).toFixed(0)}%)`, improvement, {
+    // Recipient confirmed by the user 2026-09-17: the store manager gets
+    // it (migration 50 resolved the flag that asked).
+    lines.push(line("improvement", `GP improvement over last year (${(improvementPct * 100).toFixed(0)}%) — store manager`, improvement, {
       note: lastYear == null ? "No last-year figure on file"
-        : `Last year ${lastYear.toLocaleString(undefined, { style: "currency", currency: "USD" })} — recipient unconfirmed, assumed store manager`,
+        : `Last year ${lastYear.toLocaleString(undefined, { style: "currency", currency: "USD" })}`,
       status: improvement === 0 ? "short" : null,
     }));
 
