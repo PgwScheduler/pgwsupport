@@ -49,7 +49,7 @@ export async function loadStoreMonth(
 
   const kpiRaw = await rows<Record<string, unknown> & { business_date: string; daily_service_units: { service_category_id: number; units: number }[] }>(
     db.from('daily_kpi')
-      .select('business_date, ro_count, sales_labor, sales_parts, sales_tires, sales_discounts, sales_supplies, sales_groupon, cost_parts, cost_tires, declined_sales, credit_apps, credit_dollars, daily_service_units(service_category_id, units)')
+      .select('business_date, ro_count, sales_labor, sales_parts, sales_tires, sales_discounts, sales_supplies, sales_adjustments, cost_parts, cost_tires, declined_sales, credit_apps, credit_dollars, daily_service_units(service_category_id, units)')
       .eq('location_id', locationId).gte('business_date', first).lte('business_date', last),
     'tic sheet days');
 

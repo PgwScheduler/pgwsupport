@@ -52,7 +52,7 @@ export function useTechTracker(locationId, from, to) {
   const [weekly, setWeekly] = useState([]);   // tech_weekly rows (privileged)
   const [rates, setRates] = useState([]);     // tech_pay_rates rows (privileged)
   const [storeMonth, setStoreMonth] = useState(null); // tech_store_month RPC
-  const [monthGroupon, setMonthGroupon] = useState(0); // daily_kpi groupon (store ELR)
+  const [monthAdjustments, setMonthAdjustments] = useState(0); // daily_kpi adjustments (store ELR)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -69,7 +69,7 @@ export function useTechTracker(locationId, from, to) {
       supabase.from("tech_daily").select("*")
         .eq("location_id", locationId).gte("work_date", rangeStart).lt("work_date", rangeEnd),
       supabase.rpc("tech_store_range", { loc: locationId, d_from: from, d_to: to }),
-      supabase.from("daily_kpi").select("sales_groupon")
+      supabase.from("daily_kpi").select("sales_adjustments")
         .eq("location_id", locationId).gte("business_date", from).lte("business_date", to),
     ]);
 
@@ -79,7 +79,7 @@ export function useTechTracker(locationId, from, to) {
     setEmployees(empRes.data ?? []);
     setDaily(dayRes.data ?? []);
     setStoreMonth(Array.isArray(monthRes.data) ? monthRes.data[0] ?? null : monthRes.data ?? null);
-    setMonthGroupon((kpiRes.data ?? []).reduce((a, r) => a + Number(r.sales_groupon || 0), 0));
+    setMonthAdjustments((kpiRes.data ?? []).reduce((a, r) => a + Number(r.sales_adjustments || 0), 0));
 
     if (privileged) {
       const slotIds = (slotRes.data ?? []).map((s) => s.id);
@@ -202,7 +202,7 @@ export function useTechTracker(locationId, from, to) {
       .sort((a, b) => a.slotIndex - b.slotIndex);
   }, [daily, slots, from, to]);
 
-  // Store-level ELR is groupon-blended (Summary R22); other store metrics
+  // Store-level ELR is adjustments-blended (Summary R22); other store metrics
   // come from the RPC (labor cost, avg cost/sold hr, shop proficiency).
   const storeSummary = useMemo(() => {
     const laborSales = Number(storeMonth?.labor_sales || 0);
@@ -214,9 +214,9 @@ export function useTechTracker(locationId, from, to) {
       hoursWorked: Number(storeMonth?.hours_worked || 0),
       avgTechCostPerSoldHr: storeMonth ? Number(storeMonth.avg_tech_cost_per_sold_hr) : null,
       shopProficiency: Number(storeMonth?.shop_proficiency || 0),
-      elr: flag === 0 ? 0 : (laborSales + 0.5 * monthGroupon) / flag, // blended
+      elr: flag === 0 ? 0 : (laborSales + 0.5 * monthAdjustments) / flag, // blended
     };
-  }, [storeMonth, monthGroupon]);
+  }, [storeMonth, monthAdjustments]);
 
   // ---- savers ----
   const saveDaily = useCallback(async (slotId, workDate, patch) => {

@@ -22,7 +22,7 @@ export type KpiRow = {
   sales_tires: number | string | null;
   sales_discounts: number | string | null;
   sales_supplies: number | string | null;
-  sales_groupon: number | string | null;
+  sales_adjustments: number | string | null;
   cost_parts: number | string | null;
   cost_tires: number | string | null;
   declined_sales: number | string | null;
@@ -281,7 +281,7 @@ export function buildPayload(inp: PayloadInput): PayloadResult {
     for (const sh of orderedSheets) G += sh.days.get(iso)?.labor ?? 0;
     const ro = num(k?.ro_count);
     const disc = num(k?.sales_discounts);
-    const groupon = num(k?.sales_groupon);
+    const adjustments = num(k?.sales_adjustments);
 
     const perSlot = new Map<number, { hours: number; flag: number; labor: number; comp: number }>();
     for (let n = 1; n <= techSlotsSent; n++) perSlot.set(n, { hours: 0, flag: 0, labor: 0, comp: 0 });
@@ -297,8 +297,8 @@ export function buildPayload(inp: PayloadInput): PayloadResult {
       costLabor += comp;
     }
 
-    const salesLabor = G + disc * 0.5 + 0.5 * groupon;
-    const salesParts = num(k?.sales_parts) + num(k?.sales_supplies) + disc * 0.5 + 0.5 * groupon;
+    const salesLabor = G + disc * 0.5 + 0.5 * adjustments;
+    const salesParts = num(k?.sales_parts) + num(k?.sales_supplies) + disc * 0.5 + 0.5 * adjustments;
     put('kpi_days', ro >= 1 ? 1 : 0);
     put('kpi_ro', ro);
     put('kpi_sales_labor', salesLabor);
