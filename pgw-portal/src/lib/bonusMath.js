@@ -19,7 +19,8 @@
 // labor cost is in (migration 24) — before that it is overstated by
 // roughly 20%.
 //
-// TWO STANDING DECISIONS, both surfaced as flags on screen:
+// TWO STANDING DECISIONS. The first is still an open question on screen;
+// the second was confirmed by the user 2026-09-17 (migration 52):
 //
 //   * Penalties are computed and shown but NEVER deducted. Model A's
 //     waiver depends on phone conversion, which no system tracks, so
@@ -29,7 +30,8 @@
 //
 //   * The Millwood workbook zeroes the credit-app kicker whenever
 //     projected GP clears Gold, so its best months lose the kicker.
-//     That is a defect, not policy. The kicker is paid at Gold here.
+//     That is a defect, not policy: the kicker is paid at Gold here,
+//     CONFIRMED by the user 2026-09-17.
 // =====================================================================
 
 const num = (v) => {
