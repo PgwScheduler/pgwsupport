@@ -134,14 +134,18 @@ const lakeMurray = [
   { threshold: 18, payout: 2000, increment_above: null }, { threshold: 19, payout: 2500, increment_above: 500 },
 ];
 ok("T.lakeMurray", close(scaleValue(lakeMurray, 20.5).total, 3000), scaleValue(lakeMurray, 20.5));
-// Wesmark's overage anchors on its BOTTOM row because its handout still
-// reads "above 8" — seeded as written, so it computes as written.
+// Wesmark runs 8/9/10/11 and, since migration 51, anchors its overage on
+// the TOP row: "Each unit per day above 11 will add an additional $500 to
+// the pool." The old seed anchored it on the bottom row ("above 8"), which
+// paid the increment again for tires the 9/10/11 rungs already covered.
 const wesmark = [
-  { threshold: 8, payout: 1250, increment_above: 500 }, { threshold: 9, payout: 1500, increment_above: null },
-  { threshold: 10, payout: 2000, increment_above: null }, { threshold: 11, payout: 2500, increment_above: null },
+  { threshold: 8, payout: 1250, increment_above: null }, { threshold: 9, payout: 1500, increment_above: null },
+  { threshold: 10, payout: 2000, increment_above: null }, { threshold: 11, payout: 2500, increment_above: 500 },
 ];
-ok("T.wesmarkAnchor", close(scaleValue(wesmark, 9.2).total, 2000), scaleValue(wesmark, 9.2)); // 1500 + 500
 ok("T.wesmarkAtEight", close(scaleValue(wesmark, 8.0).total, 1250), scaleValue(wesmark, 8.0));
+ok("T.wesmarkNoOverageBelowTop", close(scaleValue(wesmark, 9.2).total, 1500), scaleValue(wesmark, 9.2));
+ok("T.wesmarkAtTop", close(scaleValue(wesmark, 11.9).total, 2500), scaleValue(wesmark, 11.9));
+ok("T.wesmarkOverage", close(scaleValue(wesmark, 12.0).total, 3000), scaleValue(wesmark, 12.0)); // 2500 + 500
 
 // --- Google -----------------------------------------------------------
 ok("G.unfilled", ln(runA(), "google").status === "unfilled", ln(runA(), "google").status);

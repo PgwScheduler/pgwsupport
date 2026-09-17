@@ -39,10 +39,11 @@ const num = (v) => {
 const has = (v) => v !== null && v !== undefined && v !== "";
 
 // Highest tier whose threshold the measure reaches, plus the overage.
-// `increment_above` sits on the row that ANCHORS the overage rule — for
-// nearly every store that is the top tier, but Wesmark's sits on its
-// bottom row because its handout still reads "above 8" while its tiers
-// run 8/9/10/11. Seeded as written, so it computes as written.
+// `increment_above` sits on the row that ANCHORS the overage rule, which
+// is the top tier at every store. Wesmark used to be the exception — its
+// handout read "above 8" while its tiers run 8/9/10/11 — until the user
+// gave the correct line and migration 51 moved it to "above 11". The
+// anchor is still read from the data, not assumed to be the top row.
 export function scaleValue(rows, measure) {
   const sorted = [...(rows || [])].sort((a, b) => num(a.threshold) - num(b.threshold));
   let base = 0, matched = null;
