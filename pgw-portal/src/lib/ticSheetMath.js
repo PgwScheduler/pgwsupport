@@ -31,10 +31,11 @@
 //     column, so it is emitted for CC Apps, Credit $ and Total Potential
 //     too. The two ratio columns stay blank, as in the source — scaling
 //     numerator and denominator by the same factor cannot move a ratio.
-//   * Sales EXCLUDES Groupon, matching the source's Sales column
-//     (AJ13 = Summary G+H+J+L+N, no M). Groupon is still entered in the
-//     breakdown panel and still feeds gross profit, where the source
-//     splits it 50/50 across labor and parts (see lib/grossProfit.js).
+//   * Sales EXCLUDES Adjustments, matching the source's Sales column
+//     (AJ13 = Summary G+H+J+L+N, no M; M is the source's Groupon column,
+//     renamed Adjustments in migration 48). Adjustments are still entered in the
+//     breakdown panel and still feed gross profit, where the source
+//     splits them 50/50 across labor and parts (see lib/grossProfit.js).
 // =====================================================================
 
 const num = (v) => {
@@ -45,7 +46,7 @@ const ratio = (n, d) => (num(d) === 0 ? null : num(n) / num(d));
 const pad2 = (n) => String(n).padStart(2, "0");
 
 // Revenue lines that live on daily_kpi. Labor comes from the technician
-// tracker; Groupon is deliberately absent (see header).
+// tracker; Adjustments are deliberately absent (see header).
 const SALES_KEYS = ["sales_parts", "sales_tires", "sales_supplies", "sales_discounts"];
 
 // Sales for one day = tech-tracker labor + the daily_kpi revenue lines.

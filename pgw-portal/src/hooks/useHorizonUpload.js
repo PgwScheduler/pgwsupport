@@ -43,6 +43,18 @@ export function useHorizonUpload(locationId, monthYm) {
 
   useEffect(() => { loadLast(); }, [loadLast]);
 
+  // Re-send flag for the month on screen (migration 48). Visible to anyone
+  // who can see the store, whether or not they may send.
+  const [resend, setResend] = useState(null);
+  const loadResend = useCallback(async () => {
+    if (!locationId || !monthYm) { setResend(null); return; }
+    const { data, error } = await supabase.rpc("horizon_month_resend_status",
+      { p_location_id: locationId, p_month: `${monthYm}-01` });
+    setResend(error ? null : data?.[0] ?? null);
+  }, [locationId, monthYm]);
+
+  useEffect(() => { loadResend(); }, [loadResend]);
+
   const preview = useCallback(
     () => invoke({ location_id: locationId, month: monthYm, mode: "preview" }),
     [locationId, monthYm]
@@ -51,8 +63,9 @@ export function useHorizonUpload(locationId, monthYm) {
   const send = useCallback(async (fingerprint) => {
     const r = await invoke({ location_id: locationId, month: monthYm, mode: "send", confirm_sha256: fingerprint });
     loadLast();
+    loadResend();
     return r;
-  }, [locationId, monthYm, loadLast]);
+  }, [locationId, monthYm, loadLast, loadResend]);
 
-  return { canUse, role, lastUpload, reloadLast: loadLast, preview, send };
+  return { canUse, role, lastUpload, reloadLast: loadLast, resend, reloadResend: loadResend, preview, send };
 }

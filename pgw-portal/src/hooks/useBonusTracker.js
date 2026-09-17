@@ -16,7 +16,7 @@ import { computeBonus } from "../lib/bonusMath.js";
 // Before the tech tracker was wired in this ran ~20% high.
 const KPI_SUM_SELECT =
   "id, business_date, ro_count, credit_apps, sales_parts, sales_tires, sales_supplies, " +
-  "sales_groupon, sales_discounts, cost_parts, cost_tires";
+  "sales_adjustments, sales_discounts, cost_parts, cost_tires";
 
 const PRIVILEGED = ["admin", "master"];
 
@@ -61,14 +61,14 @@ export function useBonusTracker(store, year, month) {
     // Month-to-date actuals. days_elapsed counts ENTERED days, matching
     // the tic sheet's PACE and the source spreadsheet's COUNT of the RO
     // column — not calendar days.
-    const k = { parts_sales: 0, supplies: 0, tire_sales: 0, groupon: 0, discounts: 0, parts_cost: 0, tire_cost: 0 };
+    const k = { parts_sales: 0, supplies: 0, tire_sales: 0, adjustments: 0, discounts: 0, parts_cost: 0, tire_cost: 0 };
     let roCount = 0, creditApps = 0, daysElapsed = 0;
     const kpiIds = [];
     for (const r of kpiRes.data ?? []) {
       k.parts_sales += Number(r.sales_parts);
       k.tire_sales += Number(r.sales_tires);
       k.supplies += Number(r.sales_supplies);
-      k.groupon += Number(r.sales_groupon);
+      k.adjustments += Number(r.sales_adjustments);
       k.discounts += Number(r.sales_discounts);
       k.parts_cost += Number(r.cost_parts);
       k.tire_cost += Number(r.cost_tires);

@@ -1,10 +1,10 @@
 import React, { useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Target, X, Lock, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Target, X, Lock, Send, AlertTriangle } from "lucide-react";
 import { useMonthlyTicSheet } from "../hooks/useMonthlyTicSheet.js";
 import { useMonthlyGoals } from "../hooks/useMonthlyGoals.js";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { useHorizonUpload } from "../hooks/useHorizonUpload.js";
-import { HorizonSendModal, LastUploadLine } from "./HorizonSendModal.jsx";
+import { HorizonSendModal, LastUploadLine, ResendBanner } from "./HorizonSendModal.jsx";
 import { SectionHeader, Card, PrimaryBtn, GhostBtn, Empty, inputCls, T } from "./ui.jsx";
 import { money, moneyCell, pct, numOrDash } from "../lib/format.js";
 import { computeTicSheet, daySales, dayPotential } from "../lib/ticSheetMath.js";
@@ -66,9 +66,13 @@ const SUMMARY_COLS = [
 // Per-day Sales breakdown panel. `role` marks revenue vs cost so the panel can
 // show both a Sales total and Gross profit.
 //
-// Groupon is entered here but is NOT part of the Sales column — the source's
-// Sales is Summary G+H+J+L+N, which skips the Groupon column M. It still feeds
-// gross profit, where the source splits it 50/50 across labor and parts.
+// Adjustments (the source sheet's Groupon column M, renamed in migration 48)
+// are entered here but are NOT part of the Sales column — the source's Sales
+// is Summary G+H+J+L+N, which skips M. They still feed gross profit, where the
+// source splits them 50/50 across labor and parts.
+//
+// `restricted` fields are editable by district manager or above only. The
+// database enforces it (daily_kpi_adjustments_guard); the UI just shows it.
 const BREAKDOWN_FIELDS = [
   { key: "sales_labor", label: "Labor Sales", role: "sales", computed: true }, // from Tech Tracker; read-only
   { key: "sales_parts", label: "Parts Sales", role: "sales" },
@@ -76,7 +80,7 @@ const BREAKDOWN_FIELDS = [
   { key: "sales_tires", label: "Tire Sales", role: "sales" },
   { key: "cost_tires", label: "Tire Cost", role: "cost" },
   { key: "sales_supplies", label: "Supplies", role: "sales" },
-  { key: "sales_groupon", label: "Groupon", role: "groupon" },
+  { key: "sales_adjustments", label: "Adjustments", role: "adjustments", restricted: true }, // signed both ways
   { key: "sales_discounts", label: "Discounts", role: "discount" }, // signed both ways
 ];
 
@@ -86,7 +90,7 @@ const BREAKDOWN_FIELDS = [
 function signedBreakdownValue(field, raw) {
   const n = Number(raw);
   const v = raw === "" || raw == null || !Number.isFinite(n) ? 0 : n;
-  if (field.role === "discount" || field.role === "groupon") return v;
+  if (field.role === "discount" || field.role === "adjustments") return v;
   return v < 0 ? 0 : v;
 }
 
@@ -95,6 +99,9 @@ const HEAD_H = 196;
 const BAND_H = 26;
 const DAY_W = 108;
 const PRIVILEGED = ["admin", "master"];
+// District manager or above may set Adjustments (migration 48).
+const ADJUSTMENT_EDITORS = ["district", "regional", "admin", "master"];
+const ADJUSTMENTS_LOCKED_TIP = "Editable by district manager or above.";
 
 // ---- goals strip (unchanged behaviour, month-aware) -----------------------
 function GoalTile({ label, value, sub }) {
@@ -132,36 +139,41 @@ function GoalsStrip({ goals, year, month }) {
 }
 
 // ---- per-day sales breakdown panel ----------------------------------------
-function SalesDetailModal({ dateIso, row, laborSales, onSave, onClose }) {
+function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments, onSave, onClose }) {
+  // Locked fields show their stored value and are never sent on save.
+  const isLocked = (f) => f.computed || (f.restricted && !canEditAdjustments);
   const [vals, setVals] = useState(() => {
     const o = {};
     for (const f of BREAKDOWN_FIELDS) if (!f.computed) o[f.key] = numToStr(row?.[f.key]);
     return o;
   });
   const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const labor = num(laborSales);
   const at = (key) => signedBreakdownValue(BREAKDOWN_FIELDS.find((f) => f.key === key), vals[key]);
   // Sales = tech-tracker labor + parts + tires + supplies + discounts.
-  // Groupon and the two cost lines are excluded; gross profit adds groupon
-  // back and then deducts the costs.
+  // Adjustments and the two cost lines are excluded; gross profit adds
+  // adjustments back and then deducts the costs.
   const salesTotal = labor + at("sales_parts") + at("sales_tires") + at("sales_supplies") + at("sales_discounts");
-  const grossProfit = salesTotal + at("sales_groupon") - at("cost_parts") - at("cost_tires");
+  const grossProfit = salesTotal + at("sales_adjustments") - at("cost_parts") - at("cost_tires");
   const label = new Date(...dateIso.split("-").map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
     .toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 
   const save = async () => {
     setBusy(true);
+    setSaveError(null);
     const patch = {};
-    for (const f of BREAKDOWN_FIELDS) if (!f.computed) patch[f.key] = signedBreakdownValue(f, vals[f.key]);
-    await onSave(patch);
+    for (const f of BREAKDOWN_FIELDS) if (!isLocked(f)) patch[f.key] = signedBreakdownValue(f, vals[f.key]);
+    const { error: err } = await onSave(patch);
     setBusy(false);
+    if (err) { setSaveError(err.message); return; }
     onClose();
   };
 
   const noteFor = (f) =>
     f.computed ? " · from Tech Tracker"
       : f.role === "cost" ? " · cost"
-      : f.role === "groupon" ? " · not in Sales"
+      : f.role === "adjustments" ? " · not in Sales"
       : f.role === "discount" ? " · signed, reduces sales"
       : "";
 
@@ -178,13 +190,15 @@ function SalesDetailModal({ dateIso, row, laborSales, onSave, onClose }) {
               <span className={"mb-1 block text-xs font-medium uppercase tracking-wide " + (f.role === "cost" ? "text-content-muted" : "text-content-secondary")}>
                 {f.label} ($){noteFor(f)}
               </span>
-              {f.computed ? (
-                <div className={inputCls + " flex items-center justify-between bg-surface-page text-content-muted"}>
-                  <span>{money(labor)}</span><Lock className="h-3.5 w-3.5" />
+              {isLocked(f) ? (
+                <div className={inputCls + " flex items-center justify-between bg-surface-page text-content-muted"}
+                  title={f.computed ? undefined : ADJUSTMENTS_LOCKED_TIP}>
+                  <span>{money(f.computed ? labor : num(row?.[f.key]))}</span>
+                  <Lock className="h-3.5 w-3.5" aria-label={f.computed ? "Read-only" : ADJUSTMENTS_LOCKED_TIP} />
                 </div>
               ) : (
                 <input type="number" inputMode="decimal" step="0.01"
-                  min={f.role === "discount" || f.role === "groupon" ? undefined : "0"}
+                  min={f.role === "discount" || f.role === "adjustments" ? undefined : "0"}
                   className={inputCls} value={vals[f.key]}
                   placeholder={f.role === "discount" ? "-0.00" : "0"}
                   onChange={(e) => setVals((p) => ({ ...p, [f.key]: e.target.value }))} />
@@ -205,6 +219,7 @@ function SalesDetailModal({ dateIso, row, laborSales, onSave, onClose }) {
         <p className="mt-2 text-[11px] text-content-muted">
           Gross profit here is before technician labor cost; the goals strip above the grid shows the full figure.
         </p>
+        {saveError && <p className="mt-3 text-sm text-danger">{saveError}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <GhostBtn onClick={onClose} disabled={busy}>Cancel</GhostBtn>
           <PrimaryBtn onClick={save} disabled={busy}>Save</PrimaryBtn>
@@ -218,6 +233,7 @@ export function TicSheetView({ store }) {
   const now = new Date();
   const { role } = useAuth();
   const canEditGoals = PRIVILEGED.includes(role);
+  const canEditAdjustments = ADJUSTMENT_EDITORS.includes(role);
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1-based
 
@@ -231,6 +247,8 @@ export function TicSheetView({ store }) {
   const monthYm = `${year}-${pad2(month)}`;
   const horizon = useHorizonUpload(store.id, monthYm);
   const [showHorizon, setShowHorizon] = useState(false);
+  const needsResend = !!horizon.resend?.needs_resend;
+  const changedDays = useMemo(() => new Set(horizon.resend?.changed_days ?? []), [horizon.resend]);
   const gridRef = useRef(null);
   const goalsTimer = useRef(null);
 
@@ -361,11 +379,16 @@ export function TicSheetView({ store }) {
         subtitle={store.store_number ? `#${store.store_number} · ${store.name}` : store.name}
         action={
           <div className="flex items-center gap-2">
-            {horizon.canUse && (
+            {horizon.canUse && (needsResend ? (
+              <button onClick={() => setShowHorizon(true)} title="Adjustments changed after this month was sent"
+                className="mr-2 inline-flex items-center gap-1.5 rounded-md border border-warning-border bg-warning-tint px-3.5 py-2 text-sm font-semibold text-warning hover:brightness-125 focus:outline-none">
+                <AlertTriangle className="h-4 w-4" /> Re-send needed
+              </button>
+            ) : (
               <PrimaryBtn onClick={() => setShowHorizon(true)} className="mr-2">
                 <Send className="h-4 w-4" /> Send to Horizon
               </PrimaryBtn>
-            )}
+            ))}
             <GhostBtn onClick={() => shiftMonth(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></GhostBtn>
             <input type="month" value={`${year}-${pad2(month)}`} max={`${now.getFullYear()}-${pad2(now.getMonth() + 1)}`}
               onChange={onPickMonth}
@@ -376,6 +399,7 @@ export function TicSheetView({ store }) {
       />
 
       {horizon.canUse && <div className="-mt-2 mb-3"><LastUploadLine last={horizon.lastUpload} /></div>}
+      {needsResend && <div className="mb-3"><ResendBanner resend={horizon.resend} /></div>}
       {showHorizon && (
         <HorizonSendModal store={store} monthYm={monthYm} upload={horizon} onClose={() => setShowHorizon(false)} />
       )}
@@ -545,6 +569,10 @@ export function TicSheetView({ store }) {
                             style={{ width: DAY_W, minWidth: DAY_W }}>
                             <span className={muted ? "text-content-muted" : "text-content-primary"}>{day.dowName} {month}/{day.d}</span>
                             {day.isHoliday && <span className="ml-1 text-[10px] uppercase text-content-muted">hol</span>}
+                            {changedDays.has(iso) && (
+                              <span className="ml-1 inline-block h-2 w-2 rounded-full bg-warning align-middle"
+                                title="Adjustments changed after this month was sent" aria-label="Adjustments changed after send" />
+                            )}
                           </th>
 
                           {categories.map((c) => (
@@ -659,7 +687,12 @@ export function TicSheetView({ store }) {
           dateIso={detailDate}
           row={kpiByDate[detailDate]}
           laborSales={laborSalesByDate[detailDate]}
-          onSave={async (patch) => { await saveSummary(detailDate, patch); scheduleGoals(); }}
+          canEditAdjustments={canEditAdjustments}
+          onSave={async (patch) => {
+            const res = await saveSummary(detailDate, patch);
+            if (!res.error) { scheduleGoals(); horizon.reloadResend(); }
+            return res;
+          }}
           onClose={() => setDetailDate(null)}
         />
       )}

@@ -18,10 +18,12 @@ const CATEGORY_SELECT =
 // and has NO Horizon key — upload code must skip it.
 const KPI_COLUMNS = [
   "ro_count", "zero_dollar_tickets", "declined_sales", "credit_apps", "credit_dollars",
-  "sales_labor", "sales_parts", "sales_tires", "sales_supplies", "sales_groupon", "sales_discounts",
+  "sales_labor", "sales_parts", "sales_tires", "sales_supplies", "sales_adjustments", "sales_discounts",
   "cost_parts", "cost_tires",
 ];
-const KPI_SELECT = "id, business_date, " + KPI_COLUMNS.join(", ");
+// adjustments_updated_at is stamped by the database (migration 48) and marks
+// days changed after a Horizon send; it is read, never written.
+const KPI_SELECT = "id, business_date, adjustments_updated_at, " + KPI_COLUMNS.join(", ");
 
 export function useMonthlyTicSheet(store, year, month) {
   const { user } = useAuth();
@@ -157,11 +159,14 @@ export function useMonthlyTicSheet(store, year, month) {
   const saveSummary = useCallback(async (dateIso, patch) => {
     try {
       const id = await ensureRow(dateIso);
-      const { error: updErr } = await supabase.from("daily_kpi")
+      // Read the row back: the database may stamp columns (Adjustments
+      // audit), and an update RLS filters out returns no row, not an error.
+      const { data: saved, error: updErr } = await supabase.from("daily_kpi")
         .update({ ...patch, updated_by: user?.id ?? null, updated_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id).select(KPI_SELECT).maybeSingle();
       if (updErr) return { error: updErr };
-      kpiRef.current[dateIso] = { ...kpiRef.current[dateIso], ...patch };
+      if (!saved) return { error: new Error("The change was not saved — you may not have access to this store.") };
+      kpiRef.current[dateIso] = saved;
       rerender();
       return { error: null };
     } catch (e) { return { error: e }; }

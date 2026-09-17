@@ -57,6 +57,23 @@ export function LastUploadLine({ last }) {
   );
 }
 
+// Migration 48: Adjustments changed on a month Horizon already accepted.
+// Warning yellow, never the brand orange.
+export function ResendBanner({ resend }) {
+  if (!resend?.needs_resend) return null;
+  const who = resend.changed_by ?? "an administrator";
+  const first = when(resend.since);
+  const latest = resend.last_changed_at ? when(resend.last_changed_at) : first;
+  return (
+    <Banner tone="warning" icon={AlertTriangle}>
+      <p className="font-medium">Adjustments were changed after this month was sent. Re-send required.</p>
+      <p className="text-xs">
+        Changed by {who} · {first === latest ? first : `first ${first}, latest ${latest}`}
+      </p>
+    </Banner>
+  );
+}
+
 export function HorizonSendModal({ store, monthYm, upload, onClose }) {
   const [phase, setPhase] = useState("loading"); // loading | review | refused | sending | done
   const [review, setReview] = useState(null);

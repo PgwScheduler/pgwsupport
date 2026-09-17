@@ -7,7 +7,7 @@ function ok(name, cond, got) { if (cond) pass++; else { fail++; console.log("FAI
 // Fixture: Millwood (#3303) July 2026, transcribed from the
 // 'Maint Tic Sheet' + 'Summary' tabs of Millwood July 1.xlsm.
 // Columns: date, ROs, zero-dollar tickets, labor (technician tracker),
-//          parts, tires, supplies, groupon, discounts (signed),
+//          parts, tires, supplies, adjustments, discounts (signed),
 //          declined, CC apps, credit $, { categoryId: units }
 // Category ids here are the Midas display_order values 10..300, which run
 // 1:1 with the source's category columns D..AG.
@@ -79,10 +79,10 @@ const DAYS_OPEN = 26; // July 2026: 31 days - 4 Sundays - July 4
 
 function fixture(rows = DAYS) {
   const kpiByDate = {}, unitsByDate = {}, laborByDate = {};
-  for (const [date, ro, zero, labor, parts, tires, supplies, groupon, discounts, declined, ccApps, credit, units] of rows) {
+  for (const [date, ro, zero, labor, parts, tires, supplies, adjustments, discounts, declined, ccApps, credit, units] of rows) {
     kpiByDate[date] = {
       ro_count: ro, zero_dollar_tickets: zero, sales_parts: parts, sales_tires: tires,
-      sales_supplies: supplies, sales_groupon: groupon, sales_discounts: discounts,
+      sales_supplies: supplies, sales_adjustments: adjustments, sales_discounts: discounts,
       declined_sales: declined, credit_apps: ccApps, credit_dollars: credit,
     };
     unitsByDate[date] = units;
@@ -104,7 +104,7 @@ ok("1.airFilter",  R.month.units[10] === 38, R.month.units[10]);
 ok("1.brake",      R.month.units[50] === 30, R.month.units[50]);
 
 // --- Part 6.2 — monthly money -----------------------------------------
-// Sales excludes Groupon, exactly as the source's Sales column does.
+// Sales excludes Adjustments, exactly as the source's Sales column does.
 ok("2.sales",     close(R.month.sales, 141749.02, 0.011), R.month.sales);
 ok("2.declined",  close(R.month.declined_sales, 158155.36, 0.011), R.month.declined_sales);
 ok("2.potential", close(R.month.total_potential, 299904.38, 0.011), R.month.total_potential);
