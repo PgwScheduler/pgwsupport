@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   LogOut, LayoutDashboard, GraduationCap, Banknote, Clock, CalendarDays, FileText,
-  ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound, ClipboardList, Wrench, Trophy, BarChart3,
+  ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound, ClipboardList, Wrench, Trophy, BarChart3, BookUser,
 } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { canBuildReports } from "../lib/reportSpec.js";
@@ -19,6 +19,8 @@ const NAV = [
   { key: "hours", label: "Payroll", icon: Clock },
   { key: "schedule", label: "Employee Schedule", icon: CalendarDays },
   { key: "documents", label: "Documents", icon: FileText },
+  // Company-wide for every role (migration 55) -- not store-scoped.
+  { key: "directory", label: "Directory", icon: BookUser },
 ];
 
 // Shown to whoever canBuildReports() allows — see the flag in
@@ -57,6 +59,11 @@ function scopeLabel(profile, storeCount) {
 export function Shell({ view, setView, children }) {
   const { profile, role, stores, currentStore, selectedStoreId, setSelectedStoreId, signOut } = useAuth();
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const navItems = [
+    ...NAV,
+    ...(canBuildReports(role) ? REPORT_NAV : []),
+    ...(role === "master" ? MASTER_NAV : []),
+  ];
 
   return (
     <div className="pgw-root flex min-h-screen bg-surface-page text-content-primary">
@@ -68,11 +75,7 @@ export function Shell({ view, setView, children }) {
             <p className="mt-1.5 text-[11px] uppercase tracking-widest text-content-muted">Operations Portal</p>
           </div>
           <nav className="space-y-1">
-            {[
-              ...NAV,
-              ...(canBuildReports(role) ? REPORT_NAV : []),
-              ...(role === "master" ? MASTER_NAV : []),
-            ].map((n) => {
+            {navItems.map((n) => {
               const active = view === n.key;
               return (
                 <button
@@ -101,6 +104,21 @@ export function Shell({ view, setView, children }) {
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface-card px-5 py-3">
+          {/* The sidebar is hidden below md, which left phones with no way
+              to change screens at all. Added with the Directory, whose
+              tel:/mailto: links are the part most used from a phone. */}
+          <select
+            value={view}
+            onChange={(e) => setView(e.target.value)}
+            aria-label="Go to screen"
+            className="w-full rounded-md border border-hairline-strong bg-surface-overlay px-3 py-2 text-sm font-medium text-content-primary outline-none md:hidden"
+          >
+            {navItems.map((n) => (
+              <option key={n.key} value={n.key}>
+                {n.label}
+              </option>
+            ))}
+          </select>
           <StorePicker stores={stores} value={selectedStoreId} onChange={setSelectedStoreId} disabled={role === "store"} />
           <div className="flex items-center gap-3">
             <div className="hidden flex-col items-end sm:flex">
