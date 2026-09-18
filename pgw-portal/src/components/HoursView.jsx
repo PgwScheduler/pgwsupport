@@ -12,7 +12,7 @@ import { money, pct, numOrDash } from "../lib/format.js";
 import { exportPayrollCSV, printPayroll } from "../lib/payrollExport.js";
 import { SpeedeeHoursView } from "./SpeedeeHoursView.jsx";
 import { Card, GhostBtn, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
-import { ConfirmDialog } from "./ConfirmDialog.jsx";
+import { EmployeeProfilePanel } from "./payroll/EmployeeProfilePanel.jsx";
 import { DayCell, DayModeToggle } from "./payroll/DayCell.jsx";
 
 // The Employee Hours tab follows the store's brand — managers never toggle it.
@@ -53,7 +53,6 @@ const ENTRY_FIELDS = [
   "pto_days", "clock_hours_other", "clock_hours",
   "hrs_turned_other", "hrs_turned_here", "actual_sales", "work_orders", "sales_required",
 ];
-const RATE_FIELDS = ["hourly_rate", "flat_rate_per_hour", "manager_salary"];
 const PAY_FIELDS = ["bonus", "incentives"];
 
 const cell =
@@ -84,10 +83,10 @@ function MidasHoursView({ store, cutover, onNavigate }) {
   }, [weekList, week]);
 
   const weekIdx = weekList.indexOf(week);
-  const [pendingRemove, setPendingRemove] = useState(null); // { id, name } awaiting confirmation
+  const [profileId, setProfileId] = useState(null); // employee whose profile panel is open
   const {
     rows, dates, isDaily, privileged, rpcSummary, flatFlags, loading, error,
-    addEmployee, updateEmployee, removeEmployee, saveEntry, saveDay, saveRate, savePay,
+    addEmployee, updateEmployee, saveEntry, saveDay, savePay, refetch,
   } = usePayroll(store.id, week, "midas", cutover);
 
   const dayLabels = daysForWeek(week, cutover);
@@ -114,8 +113,6 @@ function MidasHoursView({ store, cutover, onNavigate }) {
         saveEntry(empId, { sales_required: value === "" ? null : Number(value) || 0 });
       } else if (ENTRY_FIELDS.includes(field)) {
         saveEntry(empId, { [field]: value === "" ? 0 : Number(value) || 0 });
-      } else if (RATE_FIELDS.includes(field)) {
-        saveRate(empId, { [field]: value === "" ? 0 : Number(value) || 0 });
       } else if (PAY_FIELDS.includes(field)) {
         savePay(empId, { [field]: value === "" ? 0 : Number(value) || 0 });
       }
@@ -164,10 +161,13 @@ function MidasHoursView({ store, cutover, onNavigate }) {
     return serverVal ?? "";
   };
 
+  // A new person lands straight in their profile: hire date, ADP ID and
+  // (for the office) pay are the next things anyone adding them needs.
   const onAdd = async () => {
-    await addEmployee({ full_name: newName.trim(), position: newPos });
+    const emp = await addEmployee({ full_name: newName.trim(), position: newPos });
     setNewName("");
     setNewPos("tech");
+    if (emp) setProfileId(emp.id);
   };
 
   return (
@@ -333,19 +333,19 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                     </select>
                   </td>
                   <td className="px-2 py-1.5">
-                    <input
-                      className="w-36 rounded border border-transparent bg-transparent px-1 py-1 text-sm font-medium text-content-primary outline-none focus:border-hairline-strong focus:bg-surface-overlay"
-                      value={val(empId, "full_name", r.employee.full_name)}
-                      onChange={(e) => {
-                        setLocal(empId, "full_name", e.target.value);
-                        const key = empId + ":full_name";
-                        clearTimeout(timers.current[key]);
-                        timers.current[key] = setTimeout(
-                          () => updateEmployee(empId, { full_name: e.target.value }), 500
-                        );
-                      }}
-                      placeholder="Name"
-                    />
+                    {/* The name opens the employee profile, where the name
+                        itself, hire/end dates, ADP ID and pay are edited. */}
+                    <button
+                      type="button"
+                      onClick={() => setProfileId(empId)}
+                      className="w-36 truncate px-1 py-1 text-left text-sm font-medium text-accent-text hover:underline"
+                      title="Open employee profile"
+                    >
+                      {r.employee.full_name?.trim() || "Unnamed"}
+                    </button>
+                    {r.employee.termination_date && (
+                      <span className="block px-1 text-[10px] text-content-muted">Last day {r.employee.termination_date}</span>
+                    )}
                     <div className="flex flex-wrap items-center gap-1">
                       {r.techSourced && (
                         <button
@@ -433,22 +433,21 @@ function MidasHoursView({ store, cutover, onNavigate }) {
 
                   {privileged && (
                     <>
-                      {/* Rate / Salary */}
+                      {/* Rate / Salary: the rates in force at THIS week's
+                          start (migration 56). Read-only here; they are
+                          changed on the profile with an effective date, so
+                          a raise can never re-price weeks already paid. */}
                       <td className="border-l border-hairline-strong px-1 py-1.5 text-right">
-                        {isSalaried ? (
-                          <NumCell inline field="manager_salary" empId={empId} val={val} commit={commit} server={r.mRate.manager_salary} placeholder="salary" />
-                        ) : (
-                          <NumCell inline field="hourly_rate" empId={empId} val={val} commit={commit} server={r.mRate.hourly_rate} />
-                        )}
+                        <RateLink onClick={() => setProfileId(empId)} value={isSalaried ? r.mRate.manager_salary : r.mRate.hourly_rate} />
                       </td>
                       <td className="px-1 py-1.5 text-right">
                         {isSalaried ? <span className="text-content-muted">x</span>
                           : r.employee.position === "tech" ? (
-                            // Techs' flat rate is authoritative in the Tech Tracker
-                            // (tech_pay_rates) and synced here — read-only mirror.
+                            // Techs' flat rate is authored in the Tech Tracker
+                            // and mirrored into the rate history at its date.
                             <span className="text-content-muted" title="Set in Tech Tracker">{money(r.mRate.flat_rate_per_hour)}</span>
                           ) : (
-                            <NumCell inline field="flat_rate_per_hour" empId={empId} val={val} commit={commit} server={r.mRate.flat_rate_per_hour} />
+                            <RateLink onClick={() => setProfileId(empId)} value={r.mRate.flat_rate_per_hour} />
                           )}
                       </td>
                       <td className={compCell}>{isSalaried ? "x" : money(pc.hourlyEarned)}</td>
@@ -462,9 +461,13 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                   )}
 
                   <td className="px-2 py-1.5 text-right">
-                    <button onClick={() => setPendingRemove({ id: empId, name: r.employee.full_name })} className="text-content-muted hover:text-danger" title="Remove employee">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {/* Ending employment needs a last day, so it lives on
+                        the profile; this opens it. */}
+                    {!r.employee.termination_date && (
+                      <button onClick={() => setProfileId(empId)} className="text-content-muted hover:text-danger" title="End employment (opens profile)">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -513,19 +516,24 @@ function MidasHoursView({ store, cutover, onNavigate }) {
         </p>
       </div>
 
-      {pendingRemove && (
-        <ConfirmDialog
-          title="Remove employee?"
-          message={`Remove ${pendingRemove.name?.trim() || "this employee"} from the roster? Their past weekly history is kept, but they'll no longer appear on the payroll grid or the schedule. Reactivating them requires an administrator.`}
-          confirmLabel="Remove"
-          onConfirm={() => {
-            removeEmployee(pendingRemove.id);
-            setPendingRemove(null);
-          }}
-          onClose={() => setPendingRemove(null)}
+      {profileId && (
+        <EmployeeProfilePanel
+          employeeId={profileId}
+          onClose={() => setProfileId(null)}
+          onChanged={refetch}
+          onNavigate={onNavigate}
         />
       )}
     </div>
+  );
+}
+
+// A rate shown in the grid, clickable through to where it is changed.
+function RateLink({ value, onClick }) {
+  return (
+    <button type="button" onClick={onClick} className="px-1 py-1 text-sm text-content-secondary hover:text-accent-text hover:underline" title="Change on the employee profile">
+      {money(value || 0)}
+    </button>
   );
 }
 
