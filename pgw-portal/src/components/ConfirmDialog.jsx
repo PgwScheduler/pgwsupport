@@ -5,7 +5,7 @@ import { Card, GhostBtn } from "./ui.jsx";
 // Small reusable "are you sure?" modal for destructive actions. Red confirm
 // button; click-outside or the X cancels. Pass `busy` to disable while the
 // action runs.
-export function ConfirmDialog({ title, message, confirmLabel = "Confirm", onConfirm, onClose, busy = false }) {
+export function ConfirmDialog({ title, message, confirmLabel = "Confirm", busyLabel = "Removing…", onConfirm, onClose, busy = false }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4" onClick={onClose}>
       <Card className="w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
@@ -31,7 +31,7 @@ export function ConfirmDialog({ title, message, confirmLabel = "Confirm", onConf
             disabled={busy}
             className="inline-flex items-center gap-1.5 rounded-md bg-danger px-3.5 py-2 text-sm font-semibold text-content-primary hover:bg-danger-hover focus:outline-none disabled:text-content-disabled disabled:cursor-not-allowed"
           >
-            {busy ? "Removing…" : confirmLabel}
+            {busy ? busyLabel : confirmLabel}
           </button>
         </div>
       </Card>

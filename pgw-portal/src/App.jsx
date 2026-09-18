@@ -17,6 +17,7 @@ import { canBuildReports } from "./lib/reportSpec.js";
 import { DocumentsView } from "./components/DocumentsView.jsx";
 import { TrainingView } from "./components/TrainingView.jsx";
 import { UsersView } from "./components/users/UsersView.jsx";
+import { DirectoryView } from "./components/directory/DirectoryView.jsx";
 
 function FullScreenMessage({ children }) {
   return (
@@ -97,6 +98,8 @@ export default function App() {
       {view === "reports" && canBuildReports(profile.role) && <ReportsView />}
       {view === "documents" && <DocumentsView key={"documents-" + currentStore.id} store={currentStore} />}
       {view === "training" && <TrainingView />}
+      {/* Company-wide for every role, so not keyed to currentStore. */}
+      {view === "directory" && <DirectoryView />}
       {view === "users" && profile.role === "master" && <UsersView />}
     </Shell>
   );
