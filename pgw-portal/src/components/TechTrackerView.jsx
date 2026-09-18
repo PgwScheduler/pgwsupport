@@ -8,6 +8,7 @@ import { rateForDate } from "../lib/techPayMath.js";
 import { useDateRange } from "../context/DateRangeProvider.jsx";
 import { DateRangeControl } from "./DateRangeControl.jsx";
 import { rangeLabel } from "../lib/dateRange.js";
+import { EmployeeProfilePanel } from "./payroll/EmployeeProfilePanel.jsx";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
@@ -20,6 +21,7 @@ const inMonth = (iso, y, m) => iso.slice(0, 7) === `${y}-${pad2(m)}`;
 export function TechTrackerView({ store }) {
   const { from, to } = useDateRange();
   const [selIdx, setSelIdx] = useState(1);
+  const [profileId, setProfileId] = useState(null);
 
   const tt = useTechTracker(store.id, from, to);
   const { privileged, loading, error, slotViews, storeSummary, employees, unattributed, isMonth } = tt;
@@ -75,6 +77,16 @@ export function TechTrackerView({ store }) {
           <SlotManager key={`slot-${selIdx}-${selView?.slot?.id ?? "new"}`}
             idx={selIdx} slotView={selView} employees={employees}
             slotViews={slotViews} privileged={privileged} tt={tt} />
+          {selView?.slot?.employee_id && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-content-secondary">Technician</span>
+              <button type="button" onClick={() => setProfileId(selView.slot.employee_id)}
+                className="font-medium text-accent-text hover:underline" title="Open employee profile">
+                {selView.slot.employee?.full_name?.trim() || "Unnamed"}
+              </button>
+              <span className="text-xs text-content-muted">· hire date, ADP ID and pay history on the profile</span>
+            </div>
+          )}
           {selView && (
             <TechGrid key={`${selView.slot.id}-${from}-${to}`}
               view={selView} privileged={privileged} from={from} to={to}
@@ -88,6 +100,10 @@ export function TechTrackerView({ store }) {
       {privileged && (
         <RateEditor slotViews={slotViews} ratesByEmp={tt.ratesByEmp}
           defaultDate={from} onSave={tt.saveRate} />
+      )}
+
+      {profileId && (
+        <EmployeeProfilePanel employeeId={profileId} onClose={() => setProfileId(null)} onChanged={tt.refetch} />
       )}
     </div>
   );

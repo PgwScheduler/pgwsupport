@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { weekEndOf, weekDates, isSundayWeek } from "../lib/weekUtils.js";
+import { employedDuring, ratesOn } from "../lib/payRates.js";
 
 const PRIVILEGED = ["admin", "master"];
 // Fields that live on the shared core table; everything else routes to the
@@ -25,6 +26,15 @@ const CORE_KEYS = ["pto_days", "clock_hours_other", "clock_hours"];
 // from payroll_week_hours, so an edit shows in the totals immediately
 // instead of after a round trip. Both compute the same figure; the RPC
 // is the authority and the grid reconciles to it on the next fetch.
+//
+// WHO IS ON THE WEEK (migration 56): anyone with hours or a timesheet
+// row in it, or anyone employed during it (lib/payRates.js
+// employedDuring). The whole roster is fetched, active or not, so ending
+// someone's employment no longer erases them from weeks they worked.
+//
+// RATES (migration 56) are effective-dated: each row carries the rates
+// in force at THIS week's start, read from employee_pay_rate_history.
+// They are edited on the employee profile, never in the grid.
 export function usePayroll(locationId, weekStart, brand, cutover) {
   const { user, role } = useAuth();
   const privileged = PRIVILEGED.includes(role);
@@ -50,7 +60,7 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
     setLoading(true);
 
     const [empRes, entRes] = await Promise.all([
-      supabase.from("employees").select("*").eq("location_id", locationId).eq("active", true)
+      supabase.from("employees").select("*").eq("location_id", locationId)
         .order("position", { ascending: true }).order("created_at", { ascending: true }),
       supabase.from("timesheet_entries").select("*").eq("location_id", locationId).eq("week_start", weekStart),
     ]);
@@ -105,10 +115,18 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
     if (privileged) {
       const empIds = (empRes.data ?? []).map((e) => e.id);
       const [rateRes, payRes] = await Promise.all([
-        empIds.length ? supabase.from("employee_pay_rates").select("*").in("employee_id", empIds) : Promise.resolve({ data: [] }),
+        empIds.length
+          ? supabase.from("employee_pay_rate_history").select("employee_id, rate_type, effective_date, amount").in("employee_id", empIds)
+          : Promise.resolve({ data: [] }),
         entIds.length ? supabase.from("timesheet_pay").select("*").in("timesheet_entry_id", entIds) : Promise.resolve({ data: [] }),
       ]);
-      const rateMap = {}; for (const r of rateRes.data ?? []) rateMap[r.employee_id] = r;
+      if (rateRes.error) setError(rateRes.error.message);
+      const histByEmp = {};
+      for (const h of rateRes.data ?? []) (histByEmp[h.employee_id] ||= []).push(h);
+      // Rates in force at this week's start -- the same rule as
+      // _pay_rate_at(employee, week start) in every SQL reader.
+      const rateMap = {};
+      for (const id of empIds) rateMap[id] = ratesOn(histByEmp[id], weekStart);
       const payMap = {}; for (const p of payRes.data ?? []) payMap[p.timesheet_entry_id] = p;
       setRates(rateMap);
       setPays(payMap);
@@ -159,7 +177,12 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
   const rows = useMemo(() => {
     const byEmp = {};
     for (const e of entries) byEmp[e.employee_id] = e;
-    return employees.map((emp) => {
+    const weekEnd = weekEndOf(weekStart, cutover);
+    // Mirrors payroll_pct_summary's filter: data in the week, or employed
+    // during it. Data is never dropped, whatever the dates say.
+    const onWeek = (emp) =>
+      !!byEmp[emp.id] || Object.keys(days[emp.id] ?? {}).length > 0 || employedDuring(emp, weekStart, weekEnd);
+    return employees.filter(onWeek).map((emp) => {
       const entry = byEmp[emp.id] ?? null;
       const x = ext[emp.id] ?? null;
       const empDays = days[emp.id] ?? {};
@@ -225,7 +248,7 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
         techSourced: techDates.length > 0,
       };
     });
-  }, [employees, entries, ext, rates, pays, roleRates, privileged, isSpeedee, days, dates, isDaily]);
+  }, [employees, entries, ext, rates, pays, roleRates, privileged, isSpeedee, days, dates, isDaily, weekStart, cutover]);
 
   // Ensure a core row exists for (employee, week); returns it.
   const ensureEntry = useCallback(
@@ -325,16 +348,6 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
     [days, locationId, user?.id, fetchAll]
   );
 
-  const saveRate = useCallback(async (employeeId, patch) => {
-    const { data, error: e } = await supabase
-      .from("employee_pay_rates")
-      .upsert({ employee_id: employeeId, updated_at: new Date().toISOString(), ...patch }, { onConflict: "employee_id" })
-      .select()
-      .single();
-    if (e) return setError(e.message);
-    setRates((prev) => ({ ...prev, [employeeId]: data }));
-  }, []);
-
   const savePay = useCallback(async (employeeId, patch) => {
     const entry = await ensureEntry(employeeId);
     if (!entry) return;
@@ -366,8 +379,9 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
       .insert({ location_id: locationId, full_name: full_name ?? "", position: position ?? (isSpeedee ? "cashier" : "tech") })
       .select()
       .single();
-    if (e) return setError(e.message);
+    if (e) { setError(e.message); return null; }
     setEmployees((prev) => [...prev, data]);
+    return data; // the caller opens the new person's profile
   }, [locationId, isSpeedee]);
 
   const updateEmployee = useCallback(async (employeeId, patch) => {
@@ -376,10 +390,17 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
     if (e) setError(e.message);
   }, []);
 
-  const removeEmployee = useCallback(async (employeeId) => {
-    setEmployees((prev) => prev.filter((e) => e.id !== employeeId));
-    const { error: e } = await supabase.from("employees").update({ active: false }).eq("id", employeeId);
-    if (e) setError(e.message);
+  // Replaces the old "Remove" (active = false and nothing else, which
+  // also erased the person from weeks they had worked). The last day
+  // keeps them on every week up to and including it.
+  const endEmployment = useCallback(async (employeeId, lastDay) => {
+    const { error: e } = await supabase
+      .from("employees")
+      .update({ termination_date: lastDay, active: false })
+      .eq("id", employeeId);
+    if (e) { setError(e.message); return { error: e }; }
+    setEmployees((prev) => prev.map((x) => (x.id === employeeId ? { ...x, termination_date: lastDay, active: false } : x)));
+    return { error: null };
   }, []);
 
   return {
@@ -394,10 +415,9 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
     error,
     addEmployee,
     updateEmployee,
-    removeEmployee,
+    endEmployment,
     saveEntry,
     saveDay,
-    saveRate,
     savePay,
     saveWeekSales,
     refetch: fetchAll,

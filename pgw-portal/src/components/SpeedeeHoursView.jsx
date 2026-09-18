@@ -11,7 +11,7 @@ import {
 import { money, pct, numOrDash } from "../lib/format.js";
 import { exportSpeedeeCSV, printSpeedee } from "../lib/payrollExport.js";
 import { Card, GhostBtn, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
-import { ConfirmDialog } from "./ConfirmDialog.jsx";
+import { EmployeeProfilePanel } from "./payroll/EmployeeProfilePanel.jsx";
 import { DayCell, DayModeToggle } from "./payroll/DayCell.jsx";
 
 // SpeeDee turns no hours, so its day columns carry only the two figures
@@ -22,8 +22,8 @@ const DAY_MODES = [
 ];
 
 // Field -> saver routing.
-const EMP_FIELDS = ["full_name", "position", "labor_pct_rate", "sales_expectation_flat"];
-const RATE_FIELDS = ["hourly_rate"];
+// Name and pay rates are edited on the employee profile (migration 56).
+const EMP_FIELDS = ["position", "labor_pct_rate", "sales_expectation_flat"];
 const PAY_FIELDS = ["paycheck_amount"];
 // everything else (pto/clock/spiffs/labor_sales) goes through saveEntry.
 
@@ -51,7 +51,7 @@ export function SpeedeeHoursView({ store, cutover }) {
   const [dayMode, setDayMode] = useState("hours_worked");
   const {
     rows, dates, isDaily, privileged, rpcSummary, weekSales, loading, error,
-    addEmployee, updateEmployee, removeEmployee, saveEntry, saveDay, saveRate, savePay, saveWeekSales,
+    addEmployee, updateEmployee, saveEntry, saveDay, savePay, saveWeekSales, refetch,
   } = usePayroll(store.id, week, "speedee", cutover);
 
   const dayLabels = daysForWeek(week, cutover);
@@ -61,7 +61,7 @@ export function SpeedeeHoursView({ store, cutover }) {
   const timers = useRef({});
   const [newName, setNewName] = useState("");
   const [newPos, setNewPos] = useState("cashier");
-  const [pendingRemove, setPendingRemove] = useState(null); // { id, name } awaiting confirmation
+  const [profileId, setProfileId] = useState(null); // employee whose profile panel is open
 
   useEffect(() => { setOv({}); }, [store.id, week]);
   useEffect(() => {
@@ -76,13 +76,10 @@ export function SpeedeeHoursView({ store, cutover }) {
     clearTimeout(timers.current[key]);
     timers.current[key] = setTimeout(() => {
       if (EMP_FIELDS.includes(field)) {
-        const v = field === "full_name" ? value
-          : field === "labor_pct_rate" || field === "sales_expectation_flat"
+        const v = field === "labor_pct_rate" || field === "sales_expectation_flat"
             ? (value === "" ? null : Number(value) || 0)
             : value;
         updateEmployee(empId, { [field]: v });
-      } else if (RATE_FIELDS.includes(field)) {
-        saveRate(empId, { [field]: value === "" ? 0 : Number(value) || 0 });
       } else if (PAY_FIELDS.includes(field)) {
         savePay(empId, { [field]: value === "" ? null : Number(value) || 0 });
       } else {
@@ -140,9 +137,10 @@ export function SpeedeeHoursView({ store, cutover }) {
   }, [privileged, merged, actualWeeklySales, rpcSummary]);
 
   const onAdd = async () => {
-    await addEmployee({ full_name: newName.trim(), position: newPos });
+    const emp = await addEmployee({ full_name: newName.trim(), position: newPos });
     setNewName("");
     setNewPos("cashier");
+    if (emp) setProfileId(emp.id);
   };
 
   const exportRows = merged.map((r) => ({ ...r, actualWeeklySales, salesRequired }));
@@ -269,12 +267,17 @@ export function SpeedeeHoursView({ store, cutover }) {
                     </select>
                   </td>
                   <td className="px-2 py-1.5">
-                    <input
-                      className="w-36 rounded border border-transparent bg-transparent px-1 py-1 text-sm font-medium text-content-primary outline-none focus:border-hairline-strong focus:bg-surface-overlay"
-                      value={val(empId, "full_name", r.employee.full_name)}
-                      onChange={(e) => commit(empId, "full_name", e.target.value)}
-                      placeholder="Name"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setProfileId(empId)}
+                      className="w-36 truncate px-1 py-1 text-left text-sm font-medium text-accent-text hover:underline"
+                      title="Open employee profile"
+                    >
+                      {r.employee.full_name?.trim() || "Unnamed"}
+                    </button>
+                    {r.employee.termination_date && (
+                      <span className="block px-1 text-[10px] text-content-muted">Last day {r.employee.termination_date}</span>
+                    )}
                   </td>
                   <NumCell {...{ empId, field: "pto_days", val, commit, server: r.mEntry.pto_days }} />
                   {isDaily ? (
@@ -328,7 +331,10 @@ export function SpeedeeHoursView({ store, cutover }) {
                   {privileged && (
                     <>
                       <td className="border-l border-hairline-strong px-1 py-1.5 text-right">
-                        <NumCell inline field="hourly_rate" empId={empId} val={val} commit={commit} server={r.mRate.hourly_rate} />
+                        {/* In force at this week's start; changed on the profile. */}
+                        <button type="button" onClick={() => setProfileId(empId)} className="px-1 py-1 text-sm text-content-secondary hover:text-accent-text hover:underline" title="Change on the employee profile">
+                          {money(r.mRate.hourly_rate || 0)}
+                        </button>
                       </td>
                       <td className={compCell + " text-content-secondary"}>{money(ref.hourlyEarned)}</td>
                       <td className={compCell + " text-content-secondary"}>{money(ref.otEarned)}</td>
@@ -348,9 +354,11 @@ export function SpeedeeHoursView({ store, cutover }) {
                   )}
 
                   <td className="px-2 py-1.5 text-right">
-                    <button onClick={() => setPendingRemove({ id: empId, name: r.employee.full_name })} className="text-content-muted hover:text-danger" title="Remove employee">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {!r.employee.termination_date && (
+                      <button onClick={() => setProfileId(empId)} className="text-content-muted hover:text-danger" title="End employment (opens profile)">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -399,17 +407,8 @@ export function SpeedeeHoursView({ store, cutover }) {
         </p>
       </div>
 
-      {pendingRemove && (
-        <ConfirmDialog
-          title="Remove employee?"
-          message={`Remove ${pendingRemove.name?.trim() || "this employee"} from the roster? Their past weekly history is kept, but they'll no longer appear on the payroll grid or the schedule. Reactivating them requires an administrator.`}
-          confirmLabel="Remove"
-          onConfirm={() => {
-            removeEmployee(pendingRemove.id);
-            setPendingRemove(null);
-          }}
-          onClose={() => setPendingRemove(null)}
-        />
+      {profileId && (
+        <EmployeeProfilePanel employeeId={profileId} onClose={() => setProfileId(null)} onChanged={refetch} />
       )}
     </div>
   );
