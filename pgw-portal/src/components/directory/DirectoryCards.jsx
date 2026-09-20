@@ -1,7 +1,7 @@
 import React from "react";
-import { Clock, Mail, MapPin, Pencil, Phone, UserCheck, UserX } from "lucide-react";
+import { Clock, Mail, MapPin, Pencil, Phone, UserCheck, UserX, Wrench } from "lucide-react";
 import { Card } from "../ui.jsx";
-import { BRAND_LABEL, formatAddress, hoursRows, mailHref, roleLabel, telHref } from "../../lib/directory.js";
+import { BRAND_LABEL, formatAddress, formatPhone, hoursRows, mailHref, roleLabel, telHref } from "../../lib/directory.js";
 
 // Orange is reserved for things you can act on, so links and the edit
 // controls carry it and nothing informational does. "Not assigned" and
@@ -62,10 +62,27 @@ function PeopleLine({ label, people, onJump }) {
   );
 }
 
+// One phone line: the number if there is one, a muted note if not.
+// The Marchex tracking line sits under the main line and says what it
+// is -- it is the number marketing publishes, not the shop's own.
+function PhoneLine({ label, phone, missing }) {
+  const tel = telHref(phone);
+  return (
+    <p>
+      {label && <span className="mr-1.5 text-xs uppercase tracking-wide text-content-muted">{label}</span>}
+      {tel ? (
+        <a href={tel} className={linkCls}>{formatPhone(phone)}</a>
+      ) : (
+        <span className={muted}>{phone ? formatPhone(phone) : missing}</span>
+      )}
+    </p>
+  );
+}
+
 export function StoreCard({ store: s, managers, dms, onJumpPerson, onEdit, flash }) {
   const address = formatAddress(s);
-  const tel = telHref(s.main_phone);
   const hours = hoursRows(s.hours);
+  const services = s.services ?? [];
   return (
     <Card id={"dir-store-" + s.location_id} tabIndex={-1} className={"flex flex-col gap-3 p-4 outline-none transition-shadow" + flashCls(flash)}>
       <div className="flex items-start justify-between gap-2">
@@ -93,14 +110,21 @@ export function StoreCard({ store: s, managers, dms, onJumpPerson, onEdit, flash
       </InfoRow>
 
       <InfoRow icon={Phone}>
-        {tel ? (
-          <a href={tel} className={linkCls}>
-            {s.main_phone}
-          </a>
-        ) : (
-          <p className={muted}>{s.main_phone || "Phone not entered"}</p>
-        )}
+        <PhoneLine phone={s.main_phone} missing="Phone not entered" />
+        {s.marchex_phone && <PhoneLine label="Marchex" phone={s.marchex_phone} />}
       </InfoRow>
+
+      {services.length > 0 && (
+        <InfoRow icon={Wrench}>
+          <div className="flex flex-wrap gap-1.5">
+            {services.map((x) => (
+              <span key={x.code} className="rounded-full border border-hairline-strong bg-surface-overlay px-2 py-0.5 text-[11px] text-content-secondary">
+                {x.label}
+              </span>
+            ))}
+          </div>
+        </InfoRow>
+      )}
 
       <InfoRow icon={Clock}>
         {hours ? (
@@ -155,7 +179,7 @@ export function PersonCard({ contact: c, coverage, onJumpStore, onEdit, onToggle
           <Phone className="h-4 w-4 text-content-muted" />
           {tel ? (
             <a href={tel} className={linkCls}>
-              {c.work_phone}
+              {formatPhone(c.work_phone)}
             </a>
           ) : (
             <span className={muted}>{c.work_phone || "No work phone"}</span>

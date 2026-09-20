@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Card, Field, GhostBtn, PrimaryBtn, inputCls } from "../ui.jsx";
 import {
@@ -45,7 +45,7 @@ function Footer({ saving, onClose, label = "Save" }) {
 // ---------------------------------------------------------------------
 // Store: address, phone, hours, hours note
 // ---------------------------------------------------------------------
-export function StoreEditModal({ store, onSave, onClose }) {
+export function StoreEditModal({ store, serviceTypes = [], onSave, onClose }) {
   const [f, setF] = useState({
     address_line1: store.address_line1 ?? "",
     address_line2: store.address_line2 ?? "",
@@ -53,8 +53,12 @@ export function StoreEditModal({ store, onSave, onClose }) {
     state: store.state ?? "",
     postal_code: store.postal_code ?? "",
     main_phone: store.main_phone ?? "",
+    marchex_phone: store.marchex_phone ?? "",
     hours_note: store.hours_note ?? "",
   });
+  // The card carries services as code + label; the save takes ids.
+  const offered = useMemo(() => new Set((store.services ?? []).map((x) => x.code)), [store]);
+  const [services, setServices] = useState(() => serviceTypes.filter((t) => offered.has(t.code)).map((t) => t.id));
   // "Not entered" is its own state, distinct from "closed every day".
   const [hoursEntered, setHoursEntered] = useState(store.hours != null);
   const [hours, setHours] = useState(() => hoursToForm(store.hours));
@@ -79,7 +83,7 @@ export function StoreEditModal({ store, onSave, onClose }) {
     if (invalid) return;
     setSaving(true);
     setError(null);
-    const { error } = await onSave({ ...f, hours: hoursEntered ? formToHours(hours) : null });
+    const { error } = await onSave({ ...f, hours: hoursEntered ? formToHours(hours) : null }, services);
     setSaving(false);
     if (error) setError(error.message);
     else onClose();
@@ -117,12 +121,38 @@ export function StoreEditModal({ store, onSave, onClose }) {
           {tried && (fieldErrors.state || fieldErrors.postal_code) && (
             <p className="text-xs text-danger sm:col-span-6">{[fieldErrors.state, fieldErrors.postal_code].filter(Boolean).join(" · ")}</p>
           )}
-          <div className="sm:col-span-6">
+          <div className="sm:col-span-3">
             <Field label="Main phone">
               <input className={inputCls} value={f.main_phone} onChange={set("main_phone")} type="tel" />
             </Field>
           </div>
+          <div className="sm:col-span-3">
+            <Field label="Marchex tracking number">
+              <input className={inputCls} value={f.marchex_phone} onChange={set("marchex_phone")} type="tel" />
+            </Field>
+          </div>
         </div>
+
+        {serviceTypes.length > 0 && (
+          <div>
+            <span className="mb-2 block text-xs font-medium uppercase tracking-wide text-content-secondary">Services offered</span>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {serviceTypes.map((t) => (
+                <label key={t.id} className="inline-flex items-center gap-2 text-sm text-content-primary">
+                  <input
+                    type="checkbox"
+                    className="accent-accent"
+                    checked={services.includes(t.id)}
+                    onChange={(e) =>
+                      setServices((cur) => (e.target.checked ? [...cur, t.id] : cur.filter((x) => x !== t.id)))
+                    }
+                  />
+                  {t.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -339,5 +369,101 @@ export function ContactEditModal({ contact, coverage, stores, districts, regions
         <Footer saving={saving} onClose={onClose} label={isNew ? "Add contact" : "Save"} />
       </form>
     </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Service type catalogue. Admins extend it at runtime, which is why the
+// directory never hardcodes a service list. A code is the stable key and
+// the database refuses to change one; a label is display text and is
+// freely editable. Types are deactivated, never deleted, because stores
+// point at them.
+// ---------------------------------------------------------------------
+const toCode = (label) =>
+  label.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+
+export function ServiceTypesModal({ serviceTypes, onAdd, onUpdate, onClose }) {
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const code = toCode(label);
+  const clash = serviceTypes.some((t) => t.code === code);
+
+  const add = async (e) => {
+    e.preventDefault();
+    if (!code) return setError("Enter a name.");
+    if (clash) return setError("There is already a service type with that name.");
+    setBusy(true);
+    setError(null);
+    const next = Math.max(0, ...serviceTypes.map((t) => t.sort_order ?? 0)) + 10;
+    const { error } = await onAdd(code, label.trim(), next);
+    setBusy(false);
+    if (error) setError(error.message);
+    else setLabel("");
+  };
+
+  return (
+    <Modal title="Service types" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-xs text-content-muted">
+          These are the services a store card can list. Renaming one changes it everywhere; its code stays as first created,
+          so nothing that already points at it breaks. Turning one off hides it from every store without losing which stores offered it.
+        </p>
+
+        <ul className="divide-y divide-hairline rounded-lg border border-hairline">
+          {serviceTypes.map((t) => (
+            <ServiceTypeRow key={t.id} t={t} onUpdate={onUpdate} />
+          ))}
+          {serviceTypes.length === 0 && <li className="px-3 py-4 text-sm text-content-muted">No service types yet.</li>}
+        </ul>
+
+        <form onSubmit={add} className="space-y-2 rounded-lg border border-hairline p-3">
+          <Field label="Add a service type">
+            <input className={inputCls} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Mount & Balance" />
+          </Field>
+          {code && <p className="text-xs text-content-muted">Code: <span className="text-content-secondary">{code}</span> — fixed once saved.</p>}
+          <FormError message={error} />
+          <div className="flex justify-end">
+            <PrimaryBtn type="submit" disabled={busy || !code}>{busy ? "Adding…" : "Add"}</PrimaryBtn>
+          </div>
+        </form>
+
+        <div className="flex justify-end">
+          <GhostBtn type="button" onClick={onClose}>Done</GhostBtn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ServiceTypeRow({ t, onUpdate }) {
+  const [label, setLabel] = useState(t.label);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  useEffect(() => setLabel(t.label), [t.label]);
+
+  const save = async (patch) => {
+    setBusy(true);
+    const { error } = await onUpdate(t.id, patch);
+    setBusy(false);
+    setError(error ? error.message : null);
+  };
+
+  return (
+    <li className="flex flex-wrap items-center gap-2 px-3 py-2">
+      <input
+        className={inputCls + " !w-52"}
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        onBlur={() => label.trim() && label !== t.label && save({ label: label.trim() })}
+        aria-label={`Name of ${t.label}`}
+      />
+      <span className="text-xs text-content-muted">{t.code}</span>
+      <label className="ml-auto inline-flex items-center gap-1.5 text-xs text-content-secondary">
+        <input type="checkbox" className="accent-accent" checked={t.active} disabled={busy} onChange={(e) => save({ active: e.target.checked })} />
+        Shown
+      </label>
+      {error && <span className="w-full text-xs text-danger">{error}</span>}
+    </li>
   );
 }

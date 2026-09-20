@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BookUser, Search, Store, UserPlus, Users } from "lucide-react";
+import { BookUser, Search, Store, UserPlus, Users, Wrench } from "lucide-react";
 import { useAuth } from "../../context/AuthProvider.jsx";
 import { useDirectory } from "../../hooks/useDirectory.js";
 import {
   ROLE_CATEGORIES, buildDirectoryIndex, groupStores, matchesPerson, matchesStore, sortContacts,
 } from "../../lib/directory.js";
 import { ConfirmDialog } from "../ConfirmDialog.jsx";
-import { Empty, PrimaryBtn, SectionHeader, inputCls } from "../ui.jsx";
+import { Empty, GhostBtn, PrimaryBtn, SectionHeader, inputCls } from "../ui.jsx";
 import { PersonCard, StoreCard } from "./DirectoryCards.jsx";
-import { ContactEditModal, StoreEditModal } from "./DirectoryEditors.jsx";
+import { ContactEditModal, ServiceTypesModal, StoreEditModal } from "./DirectoryEditors.jsx";
 
 // Company Directory. Unlike every other screen this one is NOT scoped to
 // the header store or to the user's location scope: every signed-in
@@ -55,7 +55,7 @@ export function DirectoryView() {
   const { role } = useAuth();
   const isAdmin = role === "admin" || role === "master";
   const dir = useDirectory();
-  const { stores, contacts, coverage, districts, regions } = dir;
+  const { stores, contacts, coverage, districts, regions, serviceTypes } = dir;
 
   const [tab, setTab] = useState("stores");
   const [query, setQuery] = useState("");
@@ -66,6 +66,7 @@ export function DirectoryView() {
   const [flash, setFlash] = useState(null);
   const [editingStore, setEditingStore] = useState(null);
   const [editingContact, setEditingContact] = useState(null); // contact, or "new"
+  const [editingServices, setEditingServices] = useState(false);
   const [toggling, setToggling] = useState(null);
   const [toggleBusy, setToggleBusy] = useState(false);
   const [pageError, setPageError] = useState(null);
@@ -158,10 +159,16 @@ export function DirectoryView() {
         title="Directory"
         subtitle="Every store and who to call, company-wide."
         action={
-          isAdmin && tab === "people" ? (
-            <PrimaryBtn onClick={() => setEditingContact("new")}>
-              <UserPlus className="h-4 w-4" /> Add contact
-            </PrimaryBtn>
+          isAdmin ? (
+            tab === "people" ? (
+              <PrimaryBtn onClick={() => setEditingContact("new")}>
+                <UserPlus className="h-4 w-4" /> Add contact
+              </PrimaryBtn>
+            ) : (
+              <GhostBtn onClick={() => setEditingServices(true)}>
+                <Wrench className="h-4 w-4" /> Service types
+              </GhostBtn>
+            )
           ) : null
         }
       />
@@ -279,8 +286,21 @@ export function DirectoryView() {
       {editingStore && (
         <StoreEditModal
           store={editingStore}
-          onSave={(f) => dir.updateStore(editingStore.location_id, f)}
+          serviceTypes={serviceTypes.filter((t) => t.active)}
+          onSave={async (f, serviceIds) => {
+            const r = await dir.updateStore(editingStore.location_id, f);
+            if (r.error) return r;
+            return dir.setStoreServices(editingStore.location_id, serviceIds);
+          }}
           onClose={() => setEditingStore(null)}
+        />
+      )}
+      {editingServices && (
+        <ServiceTypesModal
+          serviceTypes={serviceTypes}
+          onAdd={dir.addServiceType}
+          onUpdate={dir.updateServiceType}
+          onClose={() => setEditingServices(false)}
         />
       )}
       {editingContact && (

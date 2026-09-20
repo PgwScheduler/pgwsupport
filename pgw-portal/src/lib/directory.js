@@ -82,6 +82,19 @@ export function telHref(phone) {
 
 export const mailHref = (email) => (email ? `mailto:${email}` : null);
 
+// Numbers are stored as the source holds them -- BDC's seed supplies ten
+// digits with no punctuation -- and are formatted here, once, for every
+// screen. Anything that is not a plain 10- or 11-digit number is shown
+// exactly as entered rather than mangled into a shape it is not.
+export function formatPhone(phone) {
+  if (!phone) return "";
+  const s = String(phone).trim();
+  const d = s.replace(/\D/g, "");
+  if (d.length === 10) return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+  if (d.length === 11 && d.startsWith("1")) return `(${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`;
+  return s;
+}
+
 // "Midas Two Notch" -> "Two Notch". The brand is shown as a badge, so
 // the plain-language coverage line reads "Store 3935 Two Notch".
 export function storeShortName(name) {
@@ -203,7 +216,10 @@ const hit = (hay, q) => {
   return t.every((x) => h.includes(x));
 };
 
-export const matchesStore = (s, q) => hit([s.store_number, `#${s.store_number}`, s.name, s.city], q);
+// Services are searchable too: "alignments" finds every store that
+// offers them, which is the question the list is usually opened for.
+export const matchesStore = (s, q) =>
+  hit([s.store_number, `#${s.store_number}`, s.name, s.city, ...(s.services ?? []).map((x) => x.label)], q);
 
 // Coverage text is searchable too, so "Columbia East" finds its DM and
 // "3935" finds the store's manager.

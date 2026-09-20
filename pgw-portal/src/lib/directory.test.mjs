@@ -1,7 +1,7 @@
 // Offline checks for the Company Directory logic.
 // Run: node src/lib/directory.test.mjs
 import {
-  formatTime, hoursRows, telHref, mailHref, storeShortName, formatAddress, groupStores, sortContacts,
+  formatTime, hoursRows, telHref, mailHref, formatPhone, storeShortName, formatAddress, groupStores, sortContacts,
   buildDirectoryIndex, matchesStore, matchesPerson, hoursToForm, formToHours, hoursFormErrors,
 } from "./directory.js";
 
@@ -42,6 +42,14 @@ eq("ext. dropped", telHref("803-555-0100 ext. 4"), "tel:+18035550100");
 eq("no digits", telHref("TBD"), null);
 eq("empty", telHref(null), null);
 eq("mailto", mailHref("a@pgwus.com"), "mailto:a@pgwus.com");
+
+// --- phone display (BDC's seed stores ten digits, no punctuation) -------
+eq("ten digits", formatPhone("8034071911"), "(803) 407-1911");
+eq("leading 1", formatPhone("18034071911"), "(803) 407-1911");
+eq("dotted source is normalised", formatPhone("689.399.3918"), "(689) 399-3918");
+eq("an extension is not a 10-digit number, so it is shown as entered", formatPhone("803-555-0100 x12"), "803-555-0100 x12");
+eq("nonsense is shown as entered", formatPhone("call the shop"), "call the shop");
+eq("empty", formatPhone(null), "");
 
 // --- names and addresses ---------------------------------------------
 eq("strip Midas", storeShortName("Midas Two Notch"), "Two Notch");
@@ -105,6 +113,9 @@ eq("by number", matchesStore(stores[0], "3935"), true);
 eq("by #number", matchesStore(stores[0], "#3935"), true);
 eq("by name, any case", matchesStore(stores[0], "two NOTCH"), true);
 eq("by city", matchesStore(stores[3], "orlando"), true);
+eq("by service", matchesStore({ ...stores[0], services: [{ code: "alignments", label: "Alignments" }] }, "alignment"), true);
+eq("service miss", matchesStore({ ...stores[0], services: [{ code: "alignments", label: "Alignments" }] }, "loaner"), false);
+eq("no services key", matchesStore(stores[0], "alignments"), false);
 eq("all terms must match", matchesStore(stores[0], "notch orlando"), false);
 eq("empty matches", matchesStore(stores[0], "  "), true);
 eq("person by name", matchesPerson(contacts[1], [], "dana"), true);
