@@ -59,6 +59,7 @@ export function useDirectory() {
         p_postal_code: f.postal_code,
         p_main_phone: f.main_phone,
         p_marchex_phone: f.marchex_phone,
+        p_store_email: f.store_email,
         p_hours: f.hours,
         p_hours_note: f.hours_note,
       });

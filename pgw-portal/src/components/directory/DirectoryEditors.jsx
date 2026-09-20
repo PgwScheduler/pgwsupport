@@ -54,6 +54,7 @@ export function StoreEditModal({ store, serviceTypes = [], onSave, onClose }) {
     postal_code: store.postal_code ?? "",
     main_phone: store.main_phone ?? "",
     marchex_phone: store.marchex_phone ?? "",
+    store_email: store.store_email ?? "",
     hours_note: store.hours_note ?? "",
   });
   // The card carries services as code + label; the save takes ids.
@@ -72,6 +73,8 @@ export function StoreEditModal({ store, serviceTypes = [], onSave, onClose }) {
 
   const dayErrors = hoursEntered ? hoursFormErrors(hours) : {};
   const fieldErrors = {
+    store_email: f.store_email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.store_email.trim())
+      ? "That doesn't look like an email address" : null,
     state: f.state.trim() && !/^[A-Za-z]{2}$/.test(f.state.trim()) ? "Two-letter state code" : null,
     postal_code: f.postal_code.trim() && !/^\d{5}(-\d{4})?$/.test(f.postal_code.trim()) ? "ZIP as 12345 or 12345-6789" : null,
   };
@@ -91,7 +94,11 @@ export function StoreEditModal({ store, serviceTypes = [], onSave, onClose }) {
 
   return (
     <Modal title={`Edit #${store.store_number} · ${store.name}`} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
+      {/* noValidate: the fields carry type="email"/"tel" for the right
+          mobile keyboard, but the BROWSER's own validation would block
+          submit before React saw it -- leaving the form silently stuck
+          with no message. Our inline errors are the ones that speak. */}
+      <form onSubmit={submit} noValidate className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-6">
           <div className="sm:col-span-6">
             <Field label="Address line 1">
@@ -118,8 +125,8 @@ export function StoreEditModal({ store, serviceTypes = [], onSave, onClose }) {
               <input className={inputCls} value={f.postal_code} onChange={set("postal_code")} inputMode="numeric" />
             </Field>
           </div>
-          {tried && (fieldErrors.state || fieldErrors.postal_code) && (
-            <p className="text-xs text-danger sm:col-span-6">{[fieldErrors.state, fieldErrors.postal_code].filter(Boolean).join(" · ")}</p>
+          {tried && (fieldErrors.state || fieldErrors.postal_code || fieldErrors.store_email) && (
+            <p className="text-xs text-danger sm:col-span-6">{[fieldErrors.state, fieldErrors.postal_code, fieldErrors.store_email].filter(Boolean).join(" · ")}</p>
           )}
           <div className="sm:col-span-3">
             <Field label="Main phone">
@@ -129,6 +136,11 @@ export function StoreEditModal({ store, serviceTypes = [], onSave, onClose }) {
           <div className="sm:col-span-3">
             <Field label="Marchex tracking number">
               <input className={inputCls} value={f.marchex_phone} onChange={set("marchex_phone")} type="tel" />
+            </Field>
+          </div>
+          <div className="sm:col-span-6">
+            <Field label="Store email">
+              <input className={inputCls} value={f.store_email} onChange={set("store_email")} type="email" placeholder="The shop's own mailbox" />
             </Field>
           </div>
         </div>
@@ -273,7 +285,8 @@ export function ContactEditModal({ contact, coverage, stores, districts, regions
 
   return (
     <Modal title={isNew ? "Add contact" : `Edit ${contact.display_name}`} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
+      {/* noValidate -- see the note in StoreEditModal. */}
+      <form onSubmit={submit} noValidate className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Name">
             <input className={inputCls} value={f.display_name} onChange={set("display_name")} autoFocus={isNew} />
