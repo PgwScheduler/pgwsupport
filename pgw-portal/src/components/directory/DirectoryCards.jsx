@@ -143,18 +143,38 @@ export function StoreCard({ store: s, managers, dms, onJumpPerson, onEdit, flash
   );
 }
 
-export function PersonCard({ contact: c, coverage, onJumpStore, onEdit, onToggleActive, flash }) {
+// A face when there is one, initials when there is not. Never a
+// placeholder silhouette: initials say "no photo yet", a grey figure
+// reads as an unknown person.
+export function Avatar({ name, url, size = "h-12 w-12" }) {
+  const initials = String(name ?? "")
+    .split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
+  return url ? (
+    <img src={url} alt="" aria-hidden="true"
+      className={size + " flex-shrink-0 rounded-full border border-hairline object-cover"} />
+  ) : (
+    <span aria-hidden="true"
+      className={size + " flex flex-shrink-0 items-center justify-center rounded-full border border-hairline bg-surface-overlay text-sm font-semibold text-content-secondary"}>
+      {initials}
+    </span>
+  );
+}
+
+export function PersonCard({ contact: c, coverage, photoUrl, onJumpStore, onEdit, onToggleActive, flash }) {
   const tel = telHref(c.work_phone);
   const mail = mailHref(c.work_email);
   return (
     <Card id={"dir-person-" + c.id} tabIndex={-1} className={"p-4 outline-none transition-shadow" + flashCls(flash)}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="pgw-display text-base font-bold text-content-primary">{c.display_name}</p>
-          <p className="text-sm text-content-secondary">{c.title}</p>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            <Badge>{roleLabel(c.role_category)}</Badge>
-            {!c.active && <Badge>Deactivated</Badge>}
+        <div className="flex min-w-0 gap-3">
+          <Avatar name={c.display_name} url={photoUrl} />
+          <div className="min-w-0">
+            <p className="pgw-display text-base font-bold text-content-primary">{c.display_name}</p>
+            <p className="text-sm text-content-secondary">{c.title}</p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              <Badge>{roleLabel(c.role_category)}</Badge>
+              {!c.active && <Badge>Deactivated</Badge>}
+            </div>
           </div>
         </div>
         {(onEdit || onToggleActive) && (

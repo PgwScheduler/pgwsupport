@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Card, Field, GhostBtn, PrimaryBtn, inputCls } from "../ui.jsx";
 import { DEFAULT_SCOPE, ROLE_CATEGORIES, SCOPE_TYPES } from "../../lib/directory.js";
+import { Avatar } from "./DirectoryCards.jsx";
 
 // Admin-only editors. Hiding them from everyone else is tidiness; the
 // directory RPCs re-check the role and RLS is the real boundary.
@@ -174,7 +175,7 @@ function coverageToRows(coverage) {
   return coverage.map((cv) => ({ scope_type: cv.scope_type, ref: cv[refKey[cv.scope_type]] ?? "" }));
 }
 
-export function ContactEditModal({ contact, coverage, stores, districts, regions, onSave, onClose }) {
+export function ContactEditModal({ contact, coverage, stores, districts, regions, photoUrl, onUploadPhoto, onRemovePhoto, onSave, onClose }) {
   const isNew = !contact;
   const [f, setF] = useState({
     display_name: contact?.display_name ?? "",
@@ -261,6 +262,15 @@ export function ContactEditModal({ contact, coverage, stores, districts, regions
         </div>
         <p className="text-xs text-content-muted">Work contact details only — never a personal cell number.</p>
 
+        {/* A photo belongs to a contact that already exists, so it is
+            offered once they have been added rather than held in the
+            form and uploaded on save. */}
+        {isNew ? (
+          <p className="text-xs text-content-muted">A photo can be added once this person is saved.</p>
+        ) : (
+          <PhotoField name={f.display_name} url={photoUrl} onUpload={onUploadPhoto} onRemove={onRemovePhoto} />
+        )}
+
         <div>
           <span className="mb-2 block text-xs font-medium uppercase tracking-wide text-content-secondary">Covers</span>
           <div className="space-y-2">
@@ -328,6 +338,64 @@ export function ContactEditModal({ contact, coverage, stores, districts, regions
         <Footer saving={saving} onClose={onClose} label={isNew ? "Add contact" : "Save"} />
       </form>
     </Modal>
+  );
+}
+
+// A contact's photo. Uploading replaces whatever was there; removing
+// deletes the file, which is why it asks first.
+function PhotoField({ name, url, onUpload, onRemove }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [confirming, setConfirming] = useState(false);
+  const inputRef = useRef(null);
+
+  const choose = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // choosing the same file twice still fires
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    const { error } = await onUpload(file);
+    setBusy(false);
+    if (error) setError(error.message);
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    const { error } = await onRemove();
+    setBusy(false);
+    setConfirming(false);
+    if (error) setError(error.message);
+  };
+
+  return (
+    <div className="space-y-2">
+      <span className="block text-xs font-medium uppercase tracking-wide text-content-secondary">Photo</span>
+      <div className="flex flex-wrap items-center gap-3">
+        <Avatar name={name} url={url} size="h-16 w-16" />
+        <div className="flex flex-wrap gap-2">
+          <GhostBtn type="button" onClick={() => inputRef.current?.click()} disabled={busy}>
+            {busy ? "Working…" : url ? "Replace photo" : "Upload photo"}
+          </GhostBtn>
+          {url && !confirming && (
+            <button type="button" onClick={() => setConfirming(true)} disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-md border border-danger-border px-3 py-2 text-sm font-medium text-danger hover:bg-danger-tint">
+              Remove
+            </button>
+          )}
+          {url && confirming && (
+            <span className="inline-flex items-center gap-2 text-sm">
+              <span className="text-content-secondary">Delete this photo?</span>
+              <button type="button" className="font-medium text-danger hover:underline" onClick={remove} disabled={busy}>Delete</button>
+              <button type="button" className="text-content-muted hover:underline" onClick={() => setConfirming(false)}>Keep</button>
+            </span>
+          )}
+        </div>
+        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={choose} />
+      </div>
+      <p className="text-xs text-content-muted">JPEG, PNG or WebP, up to 5 MB. Saved as soon as it is chosen.</p>
+      <FormError message={error} />
+    </div>
   );
 }
 
