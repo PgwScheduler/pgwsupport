@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Card, Field, GhostBtn, PrimaryBtn, inputCls } from "../ui.jsx";
-import {
-  DAYS, DEFAULT_SCOPE, ROLE_CATEGORIES, SCOPE_TYPES, formToHours, hoursFormErrors, hoursToForm,
-} from "../../lib/directory.js";
+import { DEFAULT_SCOPE, ROLE_CATEGORIES, SCOPE_TYPES } from "../../lib/directory.js";
 
 // Admin-only editors. Hiding them from everyone else is tidiness; the
 // directory RPCs re-check the role and RLS is the real boundary.
@@ -55,30 +53,23 @@ export function StoreEditModal({ store, serviceTypes = [], onSave, onClose }) {
     main_phone: store.main_phone ?? "",
     marchex_phone: store.marchex_phone ?? "",
     store_email: store.store_email ?? "",
-    hours_note: store.hours_note ?? "",
   });
   // The card carries services as code + label; the save takes ids.
   const offered = useMemo(() => new Set((store.services ?? []).map((x) => x.code)), [store]);
   const [services, setServices] = useState(() => serviceTypes.filter((t) => offered.has(t.code)).map((t) => t.id));
-  // "Not entered" is its own state, distinct from "closed every day".
-  const [hoursEntered, setHoursEntered] = useState(store.hours != null);
-  const [hours, setHours] = useState(() => hoursToForm(store.hours));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [tried, setTried] = useState(false);
 
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
-  const setDay = (day, patch) => setHours((h) => ({ ...h, [day]: { ...h[day], ...patch } }));
-  const copyMonday = () => setHours((h) => ({ ...h, tue: { ...h.mon }, wed: { ...h.mon }, thu: { ...h.mon }, fri: { ...h.mon } }));
 
-  const dayErrors = hoursEntered ? hoursFormErrors(hours) : {};
   const fieldErrors = {
     store_email: f.store_email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.store_email.trim())
       ? "That doesn't look like an email address" : null,
     state: f.state.trim() && !/^[A-Za-z]{2}$/.test(f.state.trim()) ? "Two-letter state code" : null,
     postal_code: f.postal_code.trim() && !/^\d{5}(-\d{4})?$/.test(f.postal_code.trim()) ? "ZIP as 12345 or 12345-6789" : null,
   };
-  const invalid = Object.keys(dayErrors).length > 0 || Object.values(fieldErrors).some(Boolean);
+  const invalid = Object.values(fieldErrors).some(Boolean);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -86,7 +77,7 @@ export function StoreEditModal({ store, serviceTypes = [], onSave, onClose }) {
     if (invalid) return;
     setSaving(true);
     setError(null);
-    const { error } = await onSave({ ...f, hours: hoursEntered ? formToHours(hours) : null }, services);
+    const { error } = await onSave(f, services);
     setSaving(false);
     if (error) setError(error.message);
     else onClose();
@@ -165,51 +156,6 @@ export function StoreEditModal({ store, serviceTypes = [], onSave, onClose }) {
             </div>
           </div>
         )}
-
-        <div>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-content-secondary">Weekly hours</span>
-            <label className="inline-flex items-center gap-2 text-sm text-content-primary">
-              <input type="checkbox" className="accent-accent" checked={hoursEntered} onChange={(e) => setHoursEntered(e.target.checked)} />
-              Hours entered
-            </label>
-          </div>
-          {hoursEntered ? (
-            <div className="space-y-1.5 rounded-lg border border-hairline p-3">
-              {DAYS.map(([key, label]) => {
-                const d = hours[key];
-                return (
-                  <div key={key} className="flex flex-wrap items-center gap-2">
-                    <span className="w-10 text-sm text-content-secondary">{label}</span>
-                    <label className="inline-flex w-20 items-center gap-1.5 text-sm text-content-primary">
-                      <input type="checkbox" className="accent-accent" checked={d.open} onChange={(e) => setDay(key, { open: e.target.checked })} />
-                      Open
-                    </label>
-                    {d.open ? (
-                      <>
-                        <input type="time" className={inputCls + " !w-32"} value={d.from} onChange={(e) => setDay(key, { from: e.target.value })} aria-label={`${label} open`} />
-                        <span className="text-content-muted">–</span>
-                        <input type="time" className={inputCls + " !w-32"} value={d.to} onChange={(e) => setDay(key, { to: e.target.value })} aria-label={`${label} close`} />
-                      </>
-                    ) : (
-                      <span className="text-sm text-content-muted">Closed</span>
-                    )}
-                    {tried && dayErrors[key] && <span className="text-xs text-danger">{dayErrors[key]}</span>}
-                  </div>
-                );
-              })}
-              <button type="button" onClick={copyMonday} className="mt-1 text-xs font-medium text-accent-text hover:underline">
-                Copy Monday to Tue–Fri
-              </button>
-            </div>
-          ) : (
-            <p className="text-sm text-content-muted">Not entered — the store card says so rather than showing it closed.</p>
-          )}
-        </div>
-
-        <Field label="Hours note">
-          <input className={inputCls} value={f.hours_note} onChange={set("hours_note")} placeholder="e.g. Closed Sundays, seasonal hours" />
-        </Field>
 
         <FormError message={error} />
         <Footer saving={saving} onClose={onClose} />
