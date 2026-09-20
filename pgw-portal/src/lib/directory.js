@@ -219,7 +219,7 @@ const hit = (hay, q) => {
 // Services are searchable too: "alignments" finds every store that
 // offers them, which is the question the list is usually opened for.
 export const matchesStore = (s, q) =>
-  hit([s.store_number, `#${s.store_number}`, s.name, s.city, ...(s.services ?? []).map((x) => x.label)], q);
+  hit([s.store_number, `#${s.store_number}`, s.name, s.city, s.store_email, ...(s.services ?? []).map((x) => x.label)], q);
 
 // Coverage text is searchable too, so "Columbia East" finds its DM and
 // "3935" finds the store's manager.

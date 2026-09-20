@@ -114,6 +114,16 @@ export function StoreCard({ store: s, managers, dms, onJumpPerson, onEdit, flash
         {s.marchex_phone && <PhoneLine label="Marchex" phone={s.marchex_phone} />}
       </InfoRow>
 
+      <InfoRow icon={Mail}>
+        {s.store_email ? (
+          <a href={mailHref(s.store_email)} className={linkCls + " break-all"}>
+            {s.store_email}
+          </a>
+        ) : (
+          <p className={muted}>Email not entered</p>
+        )}
+      </InfoRow>
+
       {services.length > 0 && (
         <InfoRow icon={Wrench}>
           <div className="flex flex-wrap gap-1.5">
