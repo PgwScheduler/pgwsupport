@@ -8,11 +8,6 @@
 // `district_manager` contact with an active district-scope row for the
 // store's district.
 
-export const DAYS = [
-  ["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"],
-  ["fri", "Fri"], ["sat", "Sat"], ["sun", "Sun"],
-];
-
 export const ROLE_CATEGORIES = [
   { key: "regional_director", label: "Regional director", plural: "Regional directors" },
   { key: "district_manager", label: "District manager", plural: "District managers" },
@@ -38,35 +33,6 @@ export const DEFAULT_SCOPE = {
 };
 
 export const BRAND_LABEL = { midas: "Midas", speedee: "SpeeDee" };
-
-// "07:30" -> "7:30 AM", "18:00" -> "6 PM", "12:00" -> "12 PM".
-export function formatTime(hhmm) {
-  const m = /^(\d{2}):(\d{2})$/.exec(hhmm ?? "");
-  if (!m) return hhmm ?? "";
-  const h = Number(m[1]);
-  const suffix = h < 12 ? "AM" : "PM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return m[2] === "00" ? `${h12} ${suffix}` : `${h12}:${m[2]} ${suffix}`;
-}
-
-// Weekly hours -> display rows, with consecutive days that share hours
-// collapsed ("Mon–Fri"). Returns null when hours were never entered, so
-// "not entered" can never render as "closed all week".
-export function hoursRows(hours) {
-  if (!hours) return null;
-  const rows = [];
-  for (const [key, short] of DAYS) {
-    const v = hours[key] ?? null;
-    const text = v ? `${formatTime(v.open)} – ${formatTime(v.close)}` : "Closed";
-    const last = rows[rows.length - 1];
-    if (last && last.text === text) {
-      last.to = short;
-    } else {
-      rows.push({ from: short, to: short, text });
-    }
-  }
-  return rows.map((r) => ({ label: r.from === r.to ? r.from : `${r.from}–${r.to}`, text: r.text }));
-}
 
 // A dialable tel: href. Anything after an "x"/"ext" is an extension and
 // is dropped (a phone cannot dial it reliably); ten digits get +1.
@@ -224,30 +190,3 @@ export const matchesStore = (s, q) =>
 // Coverage text is searchable too, so "Columbia East" finds its DM and
 // "3935" finds the store's manager.
 export const matchesPerson = (c, coverageText, q) => hit([c.display_name, c.title, ...coverageText], q);
-
-// Form <-> database for the hours editor. The editor keeps one row per
-// day ({ open: bool, from, to }); the database keeps the brief's shape.
-export function hoursToForm(hours) {
-  return Object.fromEntries(
-    DAYS.map(([k]) => {
-      const v = hours?.[k] ?? null;
-      return [k, v ? { open: true, from: v.open, to: v.close } : { open: false, from: "", to: "" }];
-    })
-  );
-}
-
-export function formToHours(form) {
-  return Object.fromEntries(DAYS.map(([k]) => [k, form[k].open ? { open: form[k].from, close: form[k].to } : null]));
-}
-
-// Per-day problems, keyed by day; empty object = valid.
-export function hoursFormErrors(form) {
-  const errs = {};
-  for (const [k] of DAYS) {
-    const d = form[k];
-    if (!d.open) continue;
-    if (!/^\d{2}:\d{2}$/.test(d.from) || !/^\d{2}:\d{2}$/.test(d.to)) errs[k] = "Enter both times";
-    else if (d.from >= d.to) errs[k] = "Close must be after open";
-  }
-  return errs;
-}

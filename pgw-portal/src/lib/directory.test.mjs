@@ -1,8 +1,8 @@
 // Offline checks for the Company Directory logic.
 // Run: node src/lib/directory.test.mjs
 import {
-  formatTime, hoursRows, telHref, mailHref, formatPhone, storeShortName, formatAddress, groupStores, sortContacts,
-  buildDirectoryIndex, matchesStore, matchesPerson, hoursToForm, formToHours, hoursFormErrors,
+  telHref, mailHref, formatPhone, storeShortName, formatAddress, groupStores, sortContacts,
+  buildDirectoryIndex, matchesStore, matchesPerson,
 } from "./directory.js";
 
 let pass = 0, fail = 0;
@@ -12,26 +12,6 @@ const eq = (label, got, want) => {
   fail++;
   console.error(`FAIL ${label}\n  got  ${g}\n  want ${w}`);
 };
-
-// --- times and hours --------------------------------------------------
-eq("7:30 AM", formatTime("07:30"), "7:30 AM");
-eq("6 PM", formatTime("18:00"), "6 PM");
-eq("noon", formatTime("12:00"), "12 PM");
-eq("midnight", formatTime("00:15"), "12:15 AM");
-
-eq("never entered is null, not closed", hoursRows(null), null);
-const day = { open: "07:30", close: "18:00" };
-eq("weekdays collapse", hoursRows({ mon: day, tue: day, wed: day, thu: day, fri: day, sat: { open: "08:00", close: "16:00" }, sun: null }), [
-  { label: "Mon–Fri", text: "7:30 AM – 6 PM" },
-  { label: "Sat", text: "8 AM – 4 PM" },
-  { label: "Sun", text: "Closed" },
-]);
-eq("non-adjacent equal days do not merge", hoursRows({ mon: day, tue: null, wed: day, thu: null, fri: null, sat: null, sun: null }), [
-  { label: "Mon", text: "7:30 AM – 6 PM" },
-  { label: "Tue", text: "Closed" },
-  { label: "Wed", text: "7:30 AM – 6 PM" },
-  { label: "Thu–Sun", text: "Closed" },
-]);
 
 // --- links ------------------------------------------------------------
 eq("dotted phone", telHref("689.399.3918"), "tel:+16893993918");
@@ -122,16 +102,6 @@ eq("person by name", matchesPerson(contacts[1], [], "dana"), true);
 eq("person by title", matchesPerson(contacts[1], [], "district manager"), true);
 eq("person by coverage", matchesPerson(contacts[1], ix.coverageItems("dm").map((i) => i.text), "columbia east"), true);
 eq("person miss", matchesPerson(contacts[1], [], "payroll"), false);
-
-// --- hours form round trip -------------------------------------------
-const h = { mon: day, tue: day, wed: day, thu: day, fri: day, sat: null, sun: null };
-eq("round trip", formToHours(hoursToForm(h)), h);
-eq("null hours -> all closed form", hoursToForm(null).mon, { open: false, from: "", to: "" });
-const f = hoursToForm(h);
-f.sat = { open: true, from: "", to: "" };
-f.sun = { open: true, from: "16:00", to: "08:00" };
-eq("form errors", hoursFormErrors(f), { sat: "Enter both times", sun: "Close must be after open" });
-eq("valid form", hoursFormErrors(hoursToForm(h)), {});
 
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

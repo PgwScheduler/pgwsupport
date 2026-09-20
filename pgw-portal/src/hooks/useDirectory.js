@@ -60,8 +60,6 @@ export function useDirectory() {
         p_main_phone: f.main_phone,
         p_marchex_phone: f.marchex_phone,
         p_store_email: f.store_email,
-        p_hours: f.hours,
-        p_hours_note: f.hours_note,
       });
       if (!error) await load();
       return { error };

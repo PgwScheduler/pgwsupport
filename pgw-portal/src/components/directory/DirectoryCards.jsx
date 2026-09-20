@@ -1,7 +1,7 @@
 import React from "react";
-import { Clock, Mail, MapPin, Pencil, Phone, UserCheck, UserX, Wrench } from "lucide-react";
+import { Mail, MapPin, Pencil, Phone, UserCheck, UserX, Wrench } from "lucide-react";
 import { Card } from "../ui.jsx";
-import { BRAND_LABEL, formatAddress, formatPhone, hoursRows, mailHref, roleLabel, telHref } from "../../lib/directory.js";
+import { BRAND_LABEL, formatAddress, formatPhone, mailHref, roleLabel, telHref } from "../../lib/directory.js";
 
 // Orange is reserved for things you can act on, so links and the edit
 // controls carry it and nothing informational does. "Not assigned" and
@@ -81,7 +81,6 @@ function PhoneLine({ label, phone, missing }) {
 
 export function StoreCard({ store: s, managers, dms, onJumpPerson, onEdit, flash }) {
   const address = formatAddress(s);
-  const hours = hoursRows(s.hours);
   const services = s.services ?? [];
   return (
     <Card id={"dir-store-" + s.location_id} tabIndex={-1} className={"flex flex-col gap-3 p-4 outline-none transition-shadow" + flashCls(flash)}>
@@ -135,22 +134,6 @@ export function StoreCard({ store: s, managers, dms, onJumpPerson, onEdit, flash
           </div>
         </InfoRow>
       )}
-
-      <InfoRow icon={Clock}>
-        {hours ? (
-          <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5">
-            {hours.map((h) => (
-              <React.Fragment key={h.label}>
-                <dt className="text-content-secondary">{h.label}</dt>
-                <dd className={h.text === "Closed" ? muted : "text-content-primary"}>{h.text}</dd>
-              </React.Fragment>
-            ))}
-          </dl>
-        ) : (
-          <p className={muted}>Hours not entered</p>
-        )}
-        {s.hours_note && <p className="mt-1 text-xs italic text-content-secondary">{s.hours_note}</p>}
-      </InfoRow>
 
       <div className="mt-auto space-y-1.5 border-t border-hairline pt-3">
         <PeopleLine label="Store manager" people={managers} onJump={onJumpPerson} />
