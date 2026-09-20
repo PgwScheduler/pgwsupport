@@ -273,6 +273,7 @@ export function DirectoryView() {
                   key={c.id}
                   contact={c}
                   coverage={index.coverageItems(c.id)}
+                  photoUrl={dir.photoUrls[c.id]}
                   onJumpStore={(id) => jumpTo("store", id)}
                   onEdit={isAdmin ? () => setEditingContact(c) : null}
                   onToggleActive={isAdmin ? () => toggleNow(c) : null}
@@ -311,6 +312,9 @@ export function DirectoryView() {
           districts={districts}
           regions={regions}
           onSave={(f, cov) => dir.saveContact(editingContact === "new" ? null : editingContact.id, f, cov)}
+          photoUrl={editingContact === "new" ? null : dir.photoUrls[editingContact.id]}
+          onUploadPhoto={(file) => dir.uploadPhoto(editingContact, file)}
+          onRemovePhoto={() => dir.removePhoto(editingContact)}
           onClose={() => setEditingContact(null)}
         />
       )}
