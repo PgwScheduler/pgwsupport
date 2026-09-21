@@ -9,8 +9,9 @@ import { Card, Empty, GhostBtn, PrimaryBtn, SectionHeader, T } from "../ui.jsx";
 import { StoreMultiSelect } from "./StoreMultiSelect.jsx";
 import { MeasurePicker } from "./MeasurePicker.jsx";
 import { PriorYearImportModal } from "./PriorYearImportModal.jsx";
+import { ScorecardView } from "./ScorecardView.jsx";
 import {
-  GROUP_BY, PRESETS, formatCell, groupByLabel, hasAttributedPay, hasRepeatedMonthly,
+  GROUP_BY, formatCell, groupByLabel, hasAttributedPay, hasRepeatedMonthly,
 } from "../../lib/reportSpec.js";
 import { formatWithRules, tokenStyle } from "../../lib/reportFormat.js";
 import { rangeLabel, presetLabel } from "../../lib/dateRange.js";
@@ -54,7 +55,30 @@ function Notice({ tone = "info", icon: Icon = Info, children }) {
   );
 }
 
+// Two tabs: Matt's daily reports (Reports 1, 2, 5 and the five presets
+// that replace Task 10's) and the generic Report Builder, unchanged.
 export function ReportsView() {
+  const [area, setArea] = useState("daily");
+  return (
+    <div className="space-y-4">
+      <SectionHeader
+        title="Reports"
+        subtitle={area === "daily" ? "Matt's daily reports, from the stores' tic sheets." : "Build any report from portal data."}
+      />
+      <div role="tablist" className="flex gap-1 border-b border-hairline">
+        {[["daily", "Daily Reports"], ["builder", "Report Builder"]].map(([k, label]) => (
+          <button key={k} role="tab" aria-selected={area === k} onClick={() => setArea(k)}
+            className={"border-b-2 px-3 py-2 text-sm font-medium " + (area === k ? "border-accent text-content-primary" : "border-transparent text-content-secondary hover:text-content-primary")}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {area === "daily" ? <ScorecardView /> : <ReportBuilder />}
+    </div>
+  );
+}
+
+function ReportBuilder() {
   const b = useReportBuilder();
   const { role } = useAuth();
   const { result } = b;
@@ -97,8 +121,8 @@ export function ReportsView() {
   return (
     <div className="space-y-4">
       <SectionHeader
-        title="Reports"
-        subtitle="The five leadership reports, and a builder to make others."
+        title="Report Builder"
+        subtitle="Pick stores, measures and a grouping."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <DateRangeControl />
@@ -114,18 +138,8 @@ export function ReportsView() {
 
       <Card className="p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-content-muted">Reports</span>
-          {PRESETS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => b.applyPreset(p)}
-              title={p.hint}
-              disabled={b.loadingCatalog}
-              className="rounded-full border border-hairline-strong bg-surface-overlay px-3 py-1.5 text-xs font-medium text-content-primary hover:bg-hairline-strong disabled:opacity-40"
-            >
-              {p.label}
-            </button>
-          ))}
+          {/* Task 10's five presets were superseded by the Daily Reports
+              tab (Matt's reporting brief). */}
           {(role === "admin" || role === "master") && (
             <button
               onClick={() => setShowImport(true)}
