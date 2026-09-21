@@ -78,6 +78,18 @@
   --shift-teal: #56D4DD;    /* TRN  10.39:1 */
   --shift-green: #3FB950;   /* HOL   7.24:1 */
   --shift-magenta: #F778BA; /* OPEN  6.75:1 — the one that should catch the eye */
+
+  /* Report tiers (Matt's reports). Green / red / yellow reuse the status
+     tokens; these are the three metal tiers. Text on its own tint:
+     gold 8.99:1, silver 9.34:1, bronze 7.03:1. Bronze is a tan at 47%
+     saturation so it never reads as the accent orange (89%), which stays
+     reserved for things you can click. */
+  --tier-gold-bg: #3A3212;
+  --tier-gold-fg: #F0D875;
+  --tier-silver-bg: #2B2E33;
+  --tier-silver-fg: #D2D6DC;
+  --tier-bronze-bg: #36271D;
+  --tier-bronze-fg: #D6AE8C;
 }
 
 body {
