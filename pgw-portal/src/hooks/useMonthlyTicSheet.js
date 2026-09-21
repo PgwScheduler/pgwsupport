@@ -23,7 +23,9 @@ const KPI_COLUMNS = [
 ];
 // adjustments_updated_at is stamped by the database (migration 48) and marks
 // days changed after a Horizon send; it is read, never written.
-const KPI_SELECT = "id, business_date, adjustments_updated_at, " + KPI_COLUMNS.join(", ");
+// adjustments_note is the Adjustments reason (migration 62): written from the
+// Sales breakdown panel only, required by the database with a non-zero amount.
+const KPI_SELECT = "id, business_date, adjustments_updated_at, adjustments_note, " + KPI_COLUMNS.join(", ");
 
 export function useMonthlyTicSheet(store, year, month) {
   const { user } = useAuth();

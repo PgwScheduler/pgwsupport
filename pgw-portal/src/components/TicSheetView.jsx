@@ -147,8 +147,10 @@ function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments, onSave
     for (const f of BREAKDOWN_FIELDS) if (!f.computed) o[f.key] = numToStr(row?.[f.key]);
     return o;
   });
+  const [note, setNote] = useState(row?.adjustments_note ?? "");
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [noteError, setNoteError] = useState(null);
   const labor = num(laborSales);
   const at = (key) => signedBreakdownValue(BREAKDOWN_FIELDS.find((f) => f.key === key), vals[key]);
   // Sales = tech-tracker labor + parts + tires + supplies + discounts.
@@ -159,11 +161,23 @@ function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments, onSave
   const label = new Date(...dateIso.split("-").map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
     .toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 
+  // Migration 62: a non-zero Adjustment needs a reason, checked (like the
+  // database) only when the amount or the reason changes -- so a day entered
+  // before the rule can still have its other lines edited.
+  const storedAdj = num(row?.sales_adjustments);
+  const storedNote = (row?.adjustments_note ?? "").trim();
+  const adjNow = at("sales_adjustments");
+  const noteNow = note.trim();
+  const reasonMissing = canEditAdjustments && adjNow !== 0 && !noteNow
+    && (adjNow !== storedAdj || noteNow !== storedNote);
+
   const save = async () => {
+    if (reasonMissing) { setNoteError("Add a reason for the adjustment."); return; }
     setBusy(true);
     setSaveError(null);
     const patch = {};
     for (const f of BREAKDOWN_FIELDS) if (!isLocked(f)) patch[f.key] = signedBreakdownValue(f, vals[f.key]);
+    if (canEditAdjustments) patch.adjustments_note = noteNow || null;
     const { error: err } = await onSave(patch);
     setBusy(false);
     if (err) { setSaveError(err.message); return; }
@@ -206,6 +220,26 @@ function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments, onSave
             </label>
           ))}
         </div>
+        <label className="mt-3 block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-content-secondary">
+            Adjustment reason{canEditAdjustments && adjNow !== 0 ? " · required" : ""}
+          </span>
+          {canEditAdjustments ? (
+            <textarea rows={2} maxLength={500}
+              className={inputCls + " resize-y" + (noteError && reasonMissing ? " border-danger" : "")}
+              value={note}
+              placeholder={adjNow !== 0 ? "Why is this day adjusted?" : "Only needed when there is an adjustment"}
+              aria-invalid={!!(noteError && reasonMissing)}
+              onChange={(e) => { setNote(e.target.value); setNoteError(null); }} />
+          ) : (
+            <div className={inputCls + " flex items-start justify-between gap-2 bg-surface-page text-content-muted"}
+              title={ADJUSTMENTS_LOCKED_TIP}>
+              <span className="whitespace-pre-wrap">{storedNote || (storedAdj !== 0 ? "No reason recorded" : "—")}</span>
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-label={ADJUSTMENTS_LOCKED_TIP} />
+            </div>
+          )}
+          {noteError && reasonMissing && <span className="mt-1 block text-xs text-danger">{noteError}</span>}
+        </label>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-md border border-hairline bg-surface-page px-3 py-2">
             <span className="block text-[11px] font-medium uppercase tracking-wide text-content-muted">Sales total</span>
