@@ -17,6 +17,10 @@ const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const monthLabel = (y, m) => `${MONTHS[m - 1]} ${y}`;
 const dayOfMonth = (iso) => Number(iso.slice(8, 10));
 const inMonth = (iso, y, m) => iso.slice(0, 7) === `${y}-${pad2(m)}`;
+// tech_slots.slot_index runs 1..20 (migration 64). Most stores use 9, so the
+// picker shows 9 and grows to one past the highest slot in use.
+const BASE_TECH_SLOTS = 9;
+const MAX_TECH_SLOTS = 20;
 
 export function TechTrackerView({ store }) {
   const { from, to } = useDateRange();
@@ -31,6 +35,10 @@ export function TechTrackerView({ store }) {
     const m = {};
     for (const sv of slotViews) m[sv.slot.slot_index] = sv;
     return m;
+  }, [slotViews]);
+  const slotCount = useMemo(() => {
+    const top = slotViews.reduce((m, sv) => Math.max(m, sv.slot.slot_index), 0);
+    return Math.min(MAX_TECH_SLOTS, Math.max(BASE_TECH_SLOTS, top + 1));
   }, [slotViews]);
   const selView = slotByIndex[selIdx] || null;
   const slotName = (sv, idx) =>
@@ -56,7 +64,7 @@ export function TechTrackerView({ store }) {
 
       {/* Slot selector */}
       <div className="mb-3 flex flex-wrap gap-1.5">
-        {Array.from({ length: 9 }, (_, i) => i + 1).map((idx) => {
+        {Array.from({ length: slotCount }, (_, i) => i + 1).map((idx) => {
           const sv = slotByIndex[idx];
           const active = idx === selIdx;
           return (
