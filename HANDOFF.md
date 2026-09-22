@@ -126,6 +126,13 @@ org hierarchy, roles, ground rules). This file just tracks what's been
 
 **Data load, 2026-09-21 — Columbia district (12 stores), January–August 2026** (not migrations; Charleston generator adapted, parsed data, SQL and `STATUS.md` in OneDrive `Tic Sheet Import (Claude)columbia`). #3936, #3305, #3229, #3937, #3278, #3276, #3303 Millwood (its July 2026 test-seed slots cleared first, guarded), #3308 SpeeDee Lexington (store labor only), and — after 64 — #3935, #3984, #3979, #5254. Every store-month verified live against the workbooks (days, ROs, parts, tires, labor, units). Hardscrabble’s tic sheet sits one column left; its first load missed the tic rows and was regenerated.
 
+**Data load, 2026-09-22 — Florida district (8 stores)** (not migrations; same generator, work folder OneDrive `Tic Sheet Import (Claude)lorida` with `STATUS.md`; the source folder is spelled `Master Tic Sheet 2026Flordia`). January–August for #3548 Atlantic Blvd, #2321 Beach Blvd, #3211 Gainesville, #3136 Lem Turner, #3292 Orange Park, #3111 Sunbeam Rd; **August 17–31 only** for the newly acquired #2322 Oviedo and #2320 Semoran (their workbooks start there). All within 9 tech slots. Every store-month verified live against the workbooks (days, ROs, parts, tires, labor, units). Typo readings and name merges are listed in `STATUS.md`.
+
+**Data load, 2026-09-22 — North district (8 stores), January–August 2026** (work folder `Tic Sheet Import (Claude)
+orth`, `STATUS.md`). #3485 Capitol Heights (16 tech slots), #3923 Clinton, #3473 Duke St, #3726 Fairfax, #3593 Forestville (11), #3831 Manassas (17), #3598 Rhode Island Ave, #3296 Temple Hills — the three larger stores rely on migration 64. Every store-month verified live. **Manassas workbooks have a Summary labor formula slip** (May 30, Aug 29 and the July overflow row point one row up on one tech tab, double-counting that tech’s previous day): the portal carries the tech tabs as entered, so it is lower than the Summary on those days (May 30 by $230.27, Aug 29 by $822.08) — Horizon likely received the inflated figures. Manassas’s August uploader lost its Declined Sales formula; declined is read from the tic sheet column.
+
+**Tic-sheet history status: 37 of 38 stores loaded for January–August 2026.** Only #3029 North Charleston SpeeDee is held (parts-cost column question).
+
 ## Frontend build order
 
 1. **App shell** — Vite/React/Tailwind scaffold, real Supabase email/password auth (`AuthProvider.jsx`), role-scoped store picker, sidebar/header/breadcrumb (`Shell.jsx`). "Preview as" role switcher removed — role comes from the logged-in profile.
