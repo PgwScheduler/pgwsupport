@@ -44,7 +44,8 @@ export function useSchedule(store, year, month) {
         .order("start_time"),
       supabase
         .from("employees")
-        .select("id, full_name")
+        // Birthday + anniversary fields feed the calendar (migration 67).
+        .select("id, full_name, birth_month, birth_day, hire_date, rehire_date")
         .eq("location_id", locationId)
         .eq("active", true)
         .order("full_name"),

@@ -10,6 +10,7 @@ import { useAuth } from "../context/AuthProvider.jsx";
 const EMPLOYEE_SELECT = `
   id, location_id, full_name, position, active, is_store_manager,
   hire_date, termination_date, employee_number, created_at,
+  rehire_date, birth_month, birth_day,
   location:location_id ( name, store_number, brand )
 `;
 
