@@ -3,6 +3,7 @@ import { X, Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { Card, Field, PrimaryBtn, GhostBtn, inputCls } from "../ui.jsx";
 import { fmtTime, fmtHours, shiftHours, toMinutes, overlaps } from "../../lib/scheduleMath.js";
 import { shiftColorVar } from "../../lib/shiftTypes.js";
+import { CelebrationLine } from "./Celebrations.jsx";
 
 const prettyDate = (date) =>
   new Date(date + "T00:00:00").toLocaleDateString(undefined, {
@@ -17,7 +18,7 @@ const blankForm = { employee_id: "", start_time: "09:00", end_time: "17:00", not
 // Day detail: lists the day's shifts with edit/delete, plus an add/edit form.
 // Validates end > start in the UI (the db check enforces it too) and warns —
 // without blocking — on an overlap with the same employee's other shifts.
-export function DayDetailModal({ store, date, roster, shifts, shiftTypes = [], typesById = {}, onClose, addShift, updateShift, deleteShift }) {
+export function DayDetailModal({ store, date, roster, shifts, celebrations = [], shiftTypes = [], typesById = {}, onClose, addShift, updateShift, deleteShift }) {
   const [form, setForm] = useState(blankForm);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState(null);
@@ -112,6 +113,11 @@ export function DayDetailModal({ store, date, roster, shifts, shiftTypes = [], t
             <X className="h-5 w-5" />
           </button>
         </div>
+        {celebrations.length > 0 && (
+          <div className="mb-4 space-y-1 rounded-md border border-hairline bg-surface-overlay px-3 py-2">
+            {celebrations.map((c) => <CelebrationLine key={c.kind + c.id} c={c} />)}
+          </div>
+        )}
 
         <div className="mb-4 space-y-1.5">
           {shifts.length === 0 ? (

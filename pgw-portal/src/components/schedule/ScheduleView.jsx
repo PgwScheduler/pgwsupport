@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, Copy, Download } from "lucide-react";
 import { useSchedule } from "../../hooks/useSchedule.js";
 import { SectionHeader, Card, GhostBtn, T } from "../ui.jsx";
-import { inMonth, weekSummary, fmtTime, fmtHours, shortName, todayStr } from "../../lib/scheduleMath.js";
+import { inMonth, weekSummary, fmtTime, fmtHours, shortName, todayStr, celebrationsByDate } from "../../lib/scheduleMath.js";
+import { CelebrationLine } from "./Celebrations.jsx";
 import { shiftColorVar } from "../../lib/shiftTypes.js";
 import { DayDetailModal } from "./DayDetailModal.jsx";
 import { DuplicateMonthModal } from "./DuplicateMonthModal.jsx";
@@ -23,7 +24,9 @@ export function ScheduleView({ store }) {
     shiftTypes, typesById, canReplace, previewCopy, commitCopy,
   } = useSchedule(store, year, month);
 
-  const monthInputValue = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const celebrations = useMemo(() => celebrationsByDate(roster, grid.flat()), [roster, grid]);
+
+  const monthInputValue =`${year}-${String(month + 1).padStart(2, "0")}`;
   const today = todayStr();
 
   const shiftMonth = (delta) => {
@@ -149,6 +152,9 @@ export function ScheduleView({ store }) {
                         </span>
                       </div>
                       <div className="space-y-0.5">
+                        {(celebrations[date] ?? []).map((c) => (
+                          <CelebrationLine key={c.kind + c.id} c={c} compact />
+                        ))}
                         {dayShifts.slice(0, MAX_VISIBLE).map((s) => {
                           // An untyped shift renders exactly as it always has:
                           // no colour bar, no abbreviation, same markup.
@@ -241,6 +247,7 @@ export function ScheduleView({ store }) {
           date={openDay}
           roster={roster}
           shifts={byDate[openDay] ?? []}
+          celebrations={celebrations[openDay] ?? []}
           shiftTypes={shiftTypes}
           typesById={typesById}
           onClose={() => setOpenDay(null)}

@@ -113,11 +113,17 @@ function StatusText({ e }) {
 }
 
 // ---------------------------------------------------------------------
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; // Feb 29 allowed
+
 function Details({ e, privileged, onSave }) {
   const initial = () => ({
     full_name: e.full_name ?? "",
     position: e.position,
     hire_date: e.hire_date ?? "",
+    rehire_date: e.rehire_date ?? "",
+    birth_month: e.birth_month ? String(e.birth_month) : "",
+    birth_day: e.birth_day ? String(e.birth_day) : "",
     employee_number: e.employee_number ?? "",
     is_store_manager: !!e.is_store_manager,
   });
@@ -135,11 +141,20 @@ function Details({ e, privileged, onSave }) {
     if (!f.full_name.trim()) return setMsg({ kind: "error", text: "Name is required." });
     if (f.hire_date && e.termination_date && f.hire_date > e.termination_date)
       return setMsg({ kind: "error", text: "Hire date is after the last day worked." });
+    if (f.rehire_date && f.hire_date && f.rehire_date < f.hire_date)
+      return setMsg({ kind: "error", text: "Rehire date is before the original hire date." });
+    if (!f.birth_month !== !f.birth_day)
+      return setMsg({ kind: "error", text: "Pick both the birthday month and day, or neither." });
+    if (f.birth_month && Number(f.birth_day) > DAYS_IN_MONTH[Number(f.birth_month) - 1])
+      return setMsg({ kind: "error", text: "That birthday isn't a real date." });
     setSaving(true);
     const patch = {
       full_name: f.full_name.trim(),
       position: f.position,
       hire_date: f.hire_date || null,
+      rehire_date: f.rehire_date || null,
+      birth_month: f.birth_month ? Number(f.birth_month) : null,
+      birth_day: f.birth_day ? Number(f.birth_day) : null,
       employee_number: f.employee_number.trim() || null,
     };
     // Only admin/master see the salaried switch on the grid; same here.
@@ -163,6 +178,24 @@ function Details({ e, privileged, onSave }) {
         <Field label="Hire date">
           <input type="date" className={inputCls} value={f.hire_date} onChange={set("hire_date")} />
         </Field>
+        <Field label="Rehire date">
+          <input type="date" className={inputCls} value={f.rehire_date} onChange={set("rehire_date")} />
+        </Field>
+        {/* Month and day only -- the portal never stores a birth year. */}
+        <Field label="Birthday">
+          <div className="flex gap-2">
+            <select className={inputCls} value={f.birth_month} onChange={set("birth_month")} aria-label="Birthday month">
+              <option value="">Month</option>
+              {MONTHS.map((m, i) => <option key={m} value={String(i + 1)}>{m}</option>)}
+            </select>
+            <select className={inputCls} value={f.birth_day} onChange={set("birth_day")} aria-label="Birthday day">
+              <option value="">Day</option>
+              {Array.from({ length: f.birth_month ? DAYS_IN_MONTH[Number(f.birth_month) - 1] : 31 }, (_, i) => (
+                <option key={i + 1} value={String(i + 1)}>{i + 1}</option>
+              ))}
+            </select>
+          </div>
+        </Field>
         <Field label="Employee / ADP ID">
           <input className={inputCls} value={f.employee_number} onChange={set("employee_number")} placeholder="Optional" />
         </Field>
@@ -175,6 +208,7 @@ function Details({ e, privileged, onSave }) {
       )}
       <p className="text-xs text-content-muted">
         The hire date keeps a new person off pay weeks before they started. Weeks where they have hours always show them.
+        Birthdays and work anniversaries (from the rehire date when there is one) show on the Employee Schedule.
       </p>
       {msg && <Msg kind={msg.kind === "ok" ? "ok" : "error"}>{msg.text}</Msg>}
       <div className="flex justify-end">

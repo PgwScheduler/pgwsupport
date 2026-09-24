@@ -116,3 +116,40 @@ export function weekSummary(weekDates, byDate, typesById = {}) {
   const employees = [...perEmp.values()].sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name));
   return { total: Math.round(total * 100) / 100, employees };
 }
+
+// Birthdays and work anniversaries for the calendar (migration 67).
+// Takes the roster ({ id, full_name, birth_month, birth_day, hire_date,
+// rehire_date }) and the grid's dates; returns date -> [{ kind, id,
+// name, years? }]. Anniversaries count from rehire_date when set, else
+// hire_date, and start at one year -- the hire day itself is not one.
+// A Feb 29 date falls on Feb 28 in other years.
+const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+const onYear = (y, m, d) =>
+  `${y}-${String(m).padStart(2, "0")}-${String(m === 2 && d === 29 && !isLeap(y) ? 28 : d).padStart(2, "0")}`;
+
+export function celebrationsByDate(roster, dates) {
+  const out = {};
+  if (!dates.length) return out;
+  const want = new Set(dates);
+  const years = [...new Set(dates.map((x) => Number(x.slice(0, 4))))];
+  const add = (date, item) => (out[date] ??= []).push(item);
+  for (const e of roster ?? []) {
+    if (e.birth_month && e.birth_day) {
+      for (const y of years) {
+        const date = onYear(y, e.birth_month, e.birth_day);
+        if (want.has(date)) add(date, { kind: "birthday", id: e.id, name: e.full_name });
+      }
+    }
+    const start = e.rehire_date || e.hire_date;
+    if (start) {
+      const [sy, sm, sd] = start.split("-").map(Number);
+      for (const y of years) {
+        const date = onYear(y, sm, sd);
+        if (y > sy && want.has(date)) add(date, { kind: "anniversary", id: e.id, name: e.full_name, years: y - sy });
+      }
+    }
+  }
+  for (const list of Object.values(out))
+    list.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "birthday" ? -1 : 1));
+  return out;
+}
