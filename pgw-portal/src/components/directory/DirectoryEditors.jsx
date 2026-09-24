@@ -4,7 +4,8 @@ import { Card, Field, GhostBtn, PrimaryBtn, inputCls } from "../ui.jsx";
 import { DEFAULT_SCOPE, ROLE_CATEGORIES, SCOPE_TYPES } from "../../lib/directory.js";
 import { Avatar } from "./DirectoryCards.jsx";
 
-// Admin-only editors. Hiding them from everyone else is tidiness; the
+// Admin-only editors, apart from StorePhonesModal (district and up, on
+// their own stores). Hiding them from everyone else is tidiness; the
 // directory RPCs re-check the role and RLS is the real boundary.
 
 function Modal({ title, onClose, children }) {
@@ -158,6 +159,48 @@ export function StoreEditModal({ store, serviceTypes = [], onSave, onClose }) {
           </div>
         )}
 
+        <FormError message={error} />
+        <Footer saving={saving} onClose={onClose} />
+      </form>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Store phones only: the district-manager edit (migration 66). Address,
+// email and services stay with the admin editor above.
+// ---------------------------------------------------------------------
+export function StorePhonesModal({ store, onSave, onClose }) {
+  const [f, setF] = useState({
+    main_phone: store.main_phone ?? "",
+    marchex_phone: store.marchex_phone ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    const { error } = await onSave(f);
+    setSaving(false);
+    if (error) setError(error.message);
+    else onClose();
+  };
+
+  return (
+    <Modal title={`Phone numbers · #${store.store_number} ${store.name}`} onClose={onClose}>
+      <form onSubmit={submit} noValidate className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Main phone">
+            <input className={inputCls} value={f.main_phone} onChange={set("main_phone")} type="tel" />
+          </Field>
+          <Field label="Marchex tracking number">
+            <input className={inputCls} value={f.marchex_phone} onChange={set("marchex_phone")} type="tel" />
+          </Field>
+        </div>
         <FormError message={error} />
         <Footer saving={saving} onClose={onClose} />
       </form>

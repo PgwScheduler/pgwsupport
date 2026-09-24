@@ -8,7 +8,7 @@ import {
 import { ConfirmDialog } from "../ConfirmDialog.jsx";
 import { Empty, GhostBtn, PrimaryBtn, SectionHeader, inputCls } from "../ui.jsx";
 import { PersonCard, StoreCard } from "./DirectoryCards.jsx";
-import { ContactEditModal, ServiceTypesModal, StoreEditModal } from "./DirectoryEditors.jsx";
+import { ContactEditModal, ServiceTypesModal, StoreEditModal, StorePhonesModal } from "./DirectoryEditors.jsx";
 
 // Company Directory. Unlike every other screen this one is NOT scoped to
 // the header store or to the user's location scope: every signed-in
@@ -52,8 +52,14 @@ function Tab({ active, onClick, icon: Icon, label, count }) {
 }
 
 export function DirectoryView() {
-  const { role } = useAuth();
+  const { role, stores: myStores } = useAuth();
   const isAdmin = role === "admin" || role === "master";
+  // District managers and up may change phone numbers on the stores they
+  // can see (migration 66); the RPC enforces the same scope.
+  const phoneEditable = useMemo(
+    () => (role === "district" || role === "regional" ? new Set(myStores.map((x) => x.id)) : null),
+    [role, myStores]
+  );
   const dir = useDirectory();
   const { stores, contacts, coverage, districts, regions, serviceTypes } = dir;
 
@@ -65,6 +71,7 @@ export function DirectoryView() {
   const [jump, setJump] = useState(null); // "store-<id>" | "person-<id>"
   const [flash, setFlash] = useState(null);
   const [editingStore, setEditingStore] = useState(null);
+  const [editingPhones, setEditingPhones] = useState(null);
   const [editingContact, setEditingContact] = useState(null); // contact, or "new"
   const [editingServices, setEditingServices] = useState(false);
   const [toggling, setToggling] = useState(null);
@@ -246,7 +253,11 @@ export function DirectoryView() {
                               managers={index.storeManagersByStore.get(s.location_id)}
                               dms={index.dmsByDistrict.get(s.district_id)}
                               onJumpPerson={(id) => jumpTo("person", id)}
-                              onEdit={isAdmin ? () => setEditingStore(s) : null}
+                              onEdit={
+                                isAdmin ? () => setEditingStore(s)
+                                : phoneEditable?.has(s.location_id) ? () => setEditingPhones(s)
+                                : null
+                              }
                               flash={flash === "store-" + s.location_id}
                             />
                           ))}
@@ -294,6 +305,13 @@ export function DirectoryView() {
             return dir.setStoreServices(editingStore.location_id, serviceIds);
           }}
           onClose={() => setEditingStore(null)}
+        />
+      )}
+      {editingPhones && (
+        <StorePhonesModal
+          store={editingPhones}
+          onSave={(f) => dir.updateStorePhones(editingPhones.location_id, f)}
+          onClose={() => setEditingPhones(null)}
         />
       )}
       {editingServices && (
