@@ -83,6 +83,21 @@ export function useDirectory() {
     [load]
   );
 
+  // District managers and up, on their own stores (migration 66). The
+  // RPC re-checks role and store access, so a stray call is refused.
+  const updateStorePhones = useCallback(
+    async (locationId, f) => {
+      const { error } = await supabase.rpc("directory_update_store_phones", {
+        p_location_id: locationId,
+        p_main_phone: f.main_phone,
+        p_marchex_phone: f.marchex_phone,
+      });
+      if (!error) await load();
+      return { error };
+    },
+    [load]
+  );
+
   const saveContact = useCallback(
     async (id, f, coverage) => {
       const { data: savedId, error } = await supabase.rpc("directory_save_contact", {
@@ -191,5 +206,5 @@ export function useDirectory() {
     [load]
   );
 
-  return { ...data, photoUrls, loading, error, reload: load, updateStore, saveContact, setContactActive, setStoreServices, addServiceType, updateServiceType, uploadPhoto, removePhoto };
+  return { ...data, photoUrls, loading, error, reload: load, updateStore, updateStorePhones, saveContact, setContactActive, setStoreServices, addServiceType, updateServiceType, uploadPhoto, removePhoto };
 }
