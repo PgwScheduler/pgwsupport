@@ -19,11 +19,15 @@ const KPI_SUM_SELECT =
   "sales_adjustments, sales_discounts, cost_parts, cost_tires";
 
 const PRIVILEGED = ["admin", "master"];
+// Review count and phone conversion are a district-manager edit and up
+// (migration 65); store users only read them.
+const DM_TIER = ["district", "regional", "admin", "master"];
 
 export function useBonusTracker(store, year, month) {
   const { user, role } = useAuth();
   const locationId = store?.id ?? null;
   const canEdit = PRIVILEGED.includes(role);
+  const canEditInputs = DM_TIER.includes(role);
 
   const [state, setState] = useState({ loading: false, error: null, plan: null, target: null,
     tiers: [], inputs: null, flags: [], result: null, actual: null });
@@ -111,17 +115,23 @@ export function useBonusTracker(store, year, month) {
   // The three figures nothing tracks yet. Null is meaningful — it means
   // "never entered", which the screen shows as unfilled rather than zero.
   const saveInputs = useCallback(async (patch) => {
+    const row = { location_id: locationId, plan_year: year, month,
+      google_reviews: null, phone_conversion_pct: null, referral_gp_credit: 0,
+      ...(state.inputs ?? {}), ...patch,
+      updated_by: user?.id ?? null, updated_at: new Date().toISOString() };
+    // A non-admin upsert must not carry the referral credit at all: the
+    // column guard resets it to 0 on the insert half of the upsert, and
+    // the update half would then try to write that 0 over an admin's
+    // figure and be refused. Left out, the column keeps its value (or
+    // its default on a new row).
+    if (!canEdit) delete row.referral_gp_credit;
     const { error } = await supabase.from("bonus_monthly_inputs").upsert(
-      { location_id: locationId, plan_year: year, month,
-        google_reviews: null, phone_conversion_pct: null, referral_gp_credit: 0,
-        ...(state.inputs ?? {}), ...patch,
-        updated_by: user?.id ?? null, updated_at: new Date().toISOString() },
-      { onConflict: "location_id,plan_year,month" }
+      row, { onConflict: "location_id,plan_year,month" }
     );
     if (error) return { error };
     await load();
     return { error: null };
-  }, [locationId, year, month, state.inputs, user?.id, load]);
+  }, [locationId, year, month, state.inputs, user?.id, load, canEdit]);
 
-  return { ...state, canEdit, saveInputs, reload: load };
+  return { ...state, canEdit, canEditInputs, saveInputs, reload: load };
 }

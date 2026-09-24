@@ -90,13 +90,12 @@ function FlagList({ flags }) {
 // The three figures no system produces. Blank means blank — the screen
 // never shows an un-entered number as a zero result.
 //
-// The review count is the store's own to report, so anyone with access to
-// the store may enter it. Phone conversion and the Model D referral GP
-// credit stay admin-only: the referral credit adds straight into the
-// gross profit the bonus is calculated on, so a store that could type its
-// own number could inflate its own payout. Enforced in the database by
-// migration 27, not just here.
-function InputsPanel({ model, inputs, canEdit, onSave, onClose }) {
+// The review count and phone conversion are a district-manager edit and
+// up (canEditInputs); store users see them read-only. The Model D referral
+// GP credit stays admin-only (canEdit): it adds straight into the gross
+// profit the bonus is calculated on. Enforced in the database by
+// migration 65, not just here.
+function InputsPanel({ model, inputs, canEdit, canEditInputs, onSave, onClose }) {
   const [vals, setVals] = useState({
     google_reviews: inputs?.google_reviews ?? "",
     phone_conversion_pct: inputs?.phone_conversion_pct == null ? "" : String(inputs.phone_conversion_pct * 100),
@@ -109,11 +108,11 @@ function InputsPanel({ model, inputs, canEdit, onSave, onClose }) {
     setBusy(true);
     const patch = {
       google_reviews: blank(vals.google_reviews) ? null : Math.max(0, Math.trunc(Number(vals.google_reviews))),
+      phone_conversion_pct: blank(vals.phone_conversion_pct) ? null : Math.max(0, Number(vals.phone_conversion_pct)) / 100,
     };
-    // Send the admin-only columns only when an admin is editing them, so a
-    // store's save never trips the column guard on an untouched value.
+    // Send the referral credit only when an admin is editing it, so a DM's
+    // save never trips the column guard on an untouched value.
     if (canEdit) {
-      patch.phone_conversion_pct = blank(vals.phone_conversion_pct) ? null : Math.max(0, Number(vals.phone_conversion_pct)) / 100;
       patch.referral_gp_credit = blank(vals.referral_gp_credit) ? 0 : Number(vals.referral_gp_credit);
     }
     await onSave(patch);
@@ -133,10 +132,11 @@ function InputsPanel({ model, inputs, canEdit, onSave, onClose }) {
           <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-content-secondary">
             Five-star Google reviews
           </span>
-          <input type="number" min="0" step="1" className={inputCls} placeholder="not entered"
-            value={vals.google_reviews} onChange={set("google_reviews")} />
+          <input type="number" min="0" step="1" className={inputCls}
+            placeholder={canEditInputs ? "not entered" : "district manager"}
+            value={vals.google_reviews} onChange={set("google_reviews")} disabled={!canEditInputs} />
           <span className="mt-1 block text-[11px] text-content-muted">
-            Counted by the store — enter the month's total.
+            The month's total.{!canEditInputs && " Set by your district manager."}
           </span>
         </label>
         {model === "A" && (
@@ -145,14 +145,14 @@ function InputsPanel({ model, inputs, canEdit, onSave, onClose }) {
               Phone conversion (%)
             </span>
             <input type="number" min="0" step="0.1" className={inputCls}
-              placeholder={canEdit ? "not entered" : "admin only"}
-              value={vals.phone_conversion_pct} onChange={set("phone_conversion_pct")} disabled={!canEdit} />
+              placeholder={canEditInputs ? "not entered" : "district manager"}
+              value={vals.phone_conversion_pct} onChange={set("phone_conversion_pct")} disabled={!canEditInputs} />
             {/* Stated at the point of entry, because the figure looks like
                 a performance measure and is not one. It only ever REMOVES
                 the credit-app penalty; it is never itself a deduction. */}
             <span className="mt-1 block text-[11px] text-content-muted">
               40% or above waives the credit app penalty. It never creates one.
-              {!canEdit && " Set by an admin."}
+              {!canEditInputs && " Set by your district manager."}
             </span>
           </label>
         )}
@@ -173,13 +173,18 @@ function InputsPanel({ model, inputs, canEdit, onSave, onClose }) {
         )}
       </div>
       <div className="mt-4 flex items-center justify-end gap-2">
-        {!canEdit && (
+        {!canEditInputs && (
           <p className="mr-auto text-xs text-content-muted">
-            You can log the review count; the other figures are set by an admin.
+            These figures are set by your district manager.
+          </p>
+        )}
+        {canEditInputs && !canEdit && model === "D" && (
+          <p className="mr-auto text-xs text-content-muted">
+            The referral GP credit is set by an admin.
           </p>
         )}
         <GhostBtn onClick={onClose} disabled={busy}>Close</GhostBtn>
-        <PrimaryBtn onClick={save} disabled={busy}>Save</PrimaryBtn>
+        {canEditInputs && <PrimaryBtn onClick={save} disabled={busy}>Save</PrimaryBtn>}
       </div>
     </Card>
   );
@@ -191,7 +196,7 @@ export function BonusView({ store }) {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [showInputs, setShowInputs] = useState(false);
 
-  const { loading, error, plan, target, inputs, flags, result, actual, canEdit, saveInputs } =
+  const { loading, error, plan, target, inputs, flags, result, actual, canEdit, canEditInputs, saveInputs } =
     useBonusTracker(store, year, month);
 
   const curYm = now.getFullYear() * 12 + now.getMonth();
@@ -281,14 +286,14 @@ export function BonusView({ store }) {
                 {target.daily_car_goal != null && ` · goal ${Number(target.daily_car_goal).toFixed(1)}`}</span>
               <span>Credit apps {result.creditApps}</span>
               <button onClick={() => setShowInputs((v) => !v)} className="ml-auto underline decoration-dotted hover:text-content-primary">
-                {showInputs ? "Hide" : "Edit"} monthly inputs
+                {showInputs ? "Hide" : canEditInputs ? "Edit" : "View"} monthly inputs
                 {result.unfilled.length > 0 && <span className="ml-1 text-warning">({result.unfilled.length} unfilled)</span>}
               </button>
             </div>
           </Card>
 
           {showInputs && (
-            <InputsPanel model={plan} inputs={inputs} canEdit={canEdit}
+            <InputsPanel model={plan} inputs={inputs} canEdit={canEdit} canEditInputs={canEditInputs}
               onSave={saveInputs} onClose={() => setShowInputs(false)} />
           )}
 
