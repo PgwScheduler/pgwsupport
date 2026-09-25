@@ -9,7 +9,7 @@ import { useAuth } from "../context/AuthProvider.jsx";
 // user's network response never carries a rate.
 const EMPLOYEE_SELECT = `
   id, location_id, full_name, position, active, is_store_manager,
-  hire_date, termination_date, employee_number, created_at,
+  hire_date, termination_date, employee_number, adp_position_id, created_at,
   rehire_date, birth_month, birth_day,
   location:location_id ( name, store_number, brand, is_home_office )
 `;
@@ -56,7 +56,18 @@ export function useEmployeeProfile(employeeId) {
 
   const saveDetails = useCallback(async (patch) => {
     const { error: e } = await supabase.from("employees").update(patch).eq("id", employeeId);
-    if (!e) await load();
+    if (!e) { await load(); return { error: null }; }
+    // Migration 72: an ADP Position ID belongs to ONE active employee.
+    // Say who holds it, when this user can see them (RLS is location-scoped).
+    if (e.code === "23505" && /adp_position_id/.test(e.message ?? "")) {
+      const { data: holder } = await supabase.from("employees")
+        .select("full_name, location:location_id ( store_number )")
+        .eq("adp_position_id", String(patch.adp_position_id ?? "").trim().toUpperCase())
+        .eq("active", true).neq("id", employeeId).maybeSingle();
+      return { error: { message: holder
+        ? `ADP Position ID ${patch.adp_position_id} already belongs to ${holder.full_name} (#${holder.location?.store_number}). If that is the same person, end that row first.`
+        : `ADP Position ID ${patch.adp_position_id} already belongs to another active employee.` } };
+    }
     return { error: e };
   }, [employeeId, load]);
 
