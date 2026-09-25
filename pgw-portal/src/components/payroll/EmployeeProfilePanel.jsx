@@ -119,12 +119,13 @@ const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; // Feb 2
 function Details({ e, privileged, onSave }) {
   const initial = () => ({
     full_name: e.full_name ?? "",
-    position: e.position,
+    position: e.position ?? "",
     hire_date: e.hire_date ?? "",
     rehire_date: e.rehire_date ?? "",
     birth_month: e.birth_month ? String(e.birth_month) : "",
     birth_day: e.birth_day ? String(e.birth_day) : "",
     employee_number: e.employee_number ?? "",
+    adp_position_id: e.adp_position_id ?? "",
     is_store_manager: !!e.is_store_manager,
   });
   const [f, setF] = useState(initial);
@@ -143,6 +144,10 @@ function Details({ e, privileged, onSave }) {
       return setMsg({ kind: "error", text: "Hire date is after the last day worked." });
     if (f.rehire_date && f.hire_date && f.rehire_date < f.hire_date)
       return setMsg({ kind: "error", text: "Rehire date is before the original hire date." });
+    // Migration 72: three letters/digits then six digits, e.g. MWT000084.
+    const pid = f.adp_position_id.trim().toUpperCase();
+    if (pid && !/^[A-Z0-9]{3}[0-9]{6}$/.test(pid))
+      return setMsg({ kind: "error", text: "ADP Position ID looks like MWT000084: three letters or digits, then six digits." });
     if (!f.birth_month !== !f.birth_day)
       return setMsg({ kind: "error", text: "Pick both the birthday month and day, or neither." });
     if (f.birth_month && Number(f.birth_day) > DAYS_IN_MONTH[Number(f.birth_month) - 1])
@@ -150,12 +155,13 @@ function Details({ e, privileged, onSave }) {
     setSaving(true);
     const patch = {
       full_name: f.full_name.trim(),
-      position: f.position,
+      position: f.position || null,
       hire_date: f.hire_date || null,
       rehire_date: f.rehire_date || null,
       birth_month: f.birth_month ? Number(f.birth_month) : null,
       birth_day: f.birth_day ? Number(f.birth_day) : null,
       employee_number: f.employee_number.trim() || null,
+      adp_position_id: pid || null,
     };
     // Only admin/master see the salaried switch on the grid; same here.
     if (privileged) patch.is_store_manager = canBeSalaried(f.position) && f.is_store_manager;
@@ -172,6 +178,8 @@ function Details({ e, privileged, onSave }) {
         </Field>
         <Field label="Position">
           <select className={inputCls} value={f.position} onChange={set("position")}>
+            {/* Migration 73: blank until the position is confirmed. */}
+            {!f.position && <option value="">— Not set —</option>}
             {positions.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
         </Field>
@@ -198,6 +206,12 @@ function Details({ e, privileged, onSave }) {
         </Field>
         <Field label="Employee / ADP ID">
           <input className={inputCls} value={f.employee_number} onChange={set("employee_number")} placeholder="Optional" />
+        </Field>
+        {/* Migration 72: the key roster loads match on, so a spelling
+            difference can never create a second row for the same person. */}
+        <Field label="ADP Position ID">
+          <input className={inputCls + " uppercase"} value={f.adp_position_id} onChange={set("adp_position_id")}
+            placeholder="e.g. MWT000084" maxLength={9} autoCapitalize="characters" spellCheck={false} />
         </Field>
       </div>
       {privileged && canBeSalaried(f.position) && (

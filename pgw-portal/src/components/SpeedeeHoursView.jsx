@@ -260,9 +260,11 @@ export function SpeedeeHoursView({ store, cutover }) {
                   <td className="px-2 py-1.5">
                     <select
                       className="rounded border border-transparent bg-transparent py-1 text-sm text-content-primary outline-none focus:border-hairline-strong focus:bg-surface-overlay"
-                      value={r.employee.position}
+                      value={r.employee.position ?? ""}
                       onChange={(e) => updateEmployee(empId, { position: e.target.value })}
                     >
+                      {/* Migration 73: no position until one is confirmed. */}
+                      {!r.employee.position && <option value="" disabled>— Not set —</option>}
                       {SPEEDEE_POSITIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                     </select>
                   </td>
