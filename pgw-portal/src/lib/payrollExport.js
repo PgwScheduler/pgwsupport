@@ -9,8 +9,9 @@ import {
   POSITIONS, SPEEDEE_POSITIONS, OFFICE_POSITIONS,
 } from "./payrollMath.js";
 
-const posLabel = (p) => [...POSITIONS, ...OFFICE_POSITIONS].find(([k]) => k === p)?.[1] ?? p;
-const speedeePosLabel = (p) => SPEEDEE_POSITIONS.find(([k]) => k === p)?.[1] ?? p;
+// A blank position (migration 73) exports as "Not set", never "null".
+const posLabel = (p) => (p ? [...POSITIONS, ...OFFICE_POSITIONS].find(([k]) => k === p)?.[1] ?? p : "Not set");
+const speedeePosLabel = (p) => (p ? SPEEDEE_POSITIONS.find(([k]) => k === p)?.[1] ?? p : "Not set");
 const d2 = (n) => (n == null ? "—" : Number(n).toFixed(2));
 
 const STORE_HEAD = [

@@ -119,7 +119,7 @@ const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; // Feb 2
 function Details({ e, privileged, onSave }) {
   const initial = () => ({
     full_name: e.full_name ?? "",
-    position: e.position,
+    position: e.position ?? "",
     hire_date: e.hire_date ?? "",
     rehire_date: e.rehire_date ?? "",
     birth_month: e.birth_month ? String(e.birth_month) : "",
@@ -155,7 +155,7 @@ function Details({ e, privileged, onSave }) {
     setSaving(true);
     const patch = {
       full_name: f.full_name.trim(),
-      position: f.position,
+      position: f.position || null,
       hire_date: f.hire_date || null,
       rehire_date: f.rehire_date || null,
       birth_month: f.birth_month ? Number(f.birth_month) : null,
@@ -178,6 +178,8 @@ function Details({ e, privileged, onSave }) {
         </Field>
         <Field label="Position">
           <select className={inputCls} value={f.position} onChange={set("position")}>
+            {/* Migration 73: blank until the position is confirmed. */}
+            {!f.position && <option value="">— Not set —</option>}
             {positions.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
         </Field>
