@@ -18,7 +18,7 @@ const G = (service_key, section, sort_order, label, measure, goal, in_average) =
   ({ service_key, section, sort_order, label, measure, goal, in_average });
 const goals = [
   G("kpi_su_ac_heat", 1, 10, "A/C - Heating", "count", null, false),
-  G("kpi_su_lof", 1, 20, "LOF / day", "per_day", 7, false),
+  { ...G("kpi_su_lof", 1, 20, "LOF + Prem / day", "per_day", 7, false), also_counts: ["kpi_su_lof_premium"] },
   G("kpi_su_lof_premium", 1, 30, "Prem Oil", "pct", 0.4, false),
   G("kpi_su_air_filter", 1, 40, "Air", "pct", 0.1, true),
   G("kpi_su_cabin_filter", 1, 50, "Cabin", "pct", 0.05, true),
@@ -55,7 +55,8 @@ eq("missing unit row on an entered month is 0", v.values.kpi_su_lights, 0);
 near("section 1 average = (M+N+O+P+Q)/5 (template R4 0.01978)", v.avg[1], (4 + 1 + 2 + 2 + 0) / 91 / 5);
 near("section 2 average (template AJ4 0.01538)", v.avg[2], (2 + 1 + 0 + 3 + 1) / 91 / 5);
 near("section 3 average (template AY4 0.16703)", v.avg[3], (37 + 9 + 15 + 2 + 13) / 91 / 5);
-near("LOF per day = units / days entered", v.values.kpi_su_lof, 5);
+near("LOF per day = (LOF + LOF Premium) / days entered (migration 71)", v.values.kpi_su_lof, (65 + 20) / 13);
+near("Prem Oil column itself unchanged by also_counts", v.values.kpi_su_lof_premium, 20 / 91);
 eq("no cars = not entered (null, not zeros)", valuesOf({ ro_count: 0 }, goals), null);
 eq("missing measures = not entered", valuesOf(null, goals), null);
 
@@ -97,7 +98,7 @@ eq("no last month = no change shown", byId.s2.delta[3], null);
 eq("not entered this month = no change shown", byId.s3.delta[3], null);
 near("PGW total pools the entered stores", r.total.cur.values.kpi_su_tires, (37 + 80) / (91 + 91));
 eq("market filter", buildWhoSoldWhat(stores, markets, goals, { marketId: "m1" }).storeCount, 2);
-eq("measures requested", measuresFor(goals.slice(0, 2)), ["ro_count", "gross_sales", "days_with_data", "cat_units_kpi_su_ac_heat", "cat_units_kpi_su_lof"]);
+eq("measures requested include also_counts", measuresFor(goals.slice(0, 2)), ["ro_count", "gross_sales", "days_with_data", "cat_units_kpi_su_ac_heat", "cat_units_kpi_su_lof", "cat_units_kpi_su_lof_premium"]);
 
 eq("prevMonth", [prevMonth("2026-08"), prevMonth("2026-01")], ["2026-07", "2025-12"]);
 eq("monthBounds", [monthBounds("2026-02"), monthBounds("2024-02")], [{ from: "2026-02-01", to: "2026-02-28" }, { from: "2024-02-01", to: "2024-02-29" }]);

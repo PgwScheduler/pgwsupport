@@ -9,6 +9,8 @@
 // DEFINITIONS (all from the template):
 //   pct      units / cars                   e.g. Prem Oil = L25 / H4
 //   per_day  units / days entered           LOF "min 7/day"
+//   also_counts: other services whose units are ADDED to a column's own
+//            (migration 71: LOF counts LOF + LOF Premium, all oil changes)
 //   count    units
 //   average  mean of the section's in_average % values: (M+N+O+P+Q)/5
 //   rank     by that average, highest = 1; ties share a rank (1, 2, 2, 4)
@@ -33,8 +35,12 @@ export const unitsKey = (serviceKey) => `cat_units_${serviceKey}`;
 
 // The report_build measures this report needs.
 export function measuresFor(goals) {
-  return ["ro_count", "gross_sales", "days_with_data", ...goals.map((g) => unitsKey(g.service_key))];
+  const keys = new Set(goals.flatMap((g) => [g.service_key, ...(g.also_counts ?? [])]));
+  return ["ro_count", "gross_sales", "days_with_data", ...[...keys].map(unitsKey)];
 }
+
+// A column's units: its own service plus any it also counts.
+export const serviceKeysOf = (g) => [g.service_key, ...(g.also_counts ?? [])];
 
 const num = (v) => (v === null || v === undefined || v === "" ? null : Number(v));
 
@@ -62,7 +68,7 @@ export function valuesOf(m, goals) {
   for (const g of goals) {
     // A category with nothing sold has no unit row, so on an entered
     // month a missing count is 0, not blank.
-    const u = num(m?.[unitsKey(g.service_key)]) ?? 0;
+    const u = serviceKeysOf(g).reduce((a, k) => a + (num(m?.[unitsKey(k)]) ?? 0), 0);
     values[g.service_key] =
       g.measure === "pct" ? u / cars
       : g.measure === "per_day" ? (days > 0 ? u / days : null)

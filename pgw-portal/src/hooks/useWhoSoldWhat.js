@@ -51,7 +51,7 @@ export function useWhoSoldWhat() {
         supabase.from("locations").select("id, store_number, name, is_sandbox, is_home_office"),
         supabase.from("store_report_profile").select("location_id, market_id, report_sort_order, report_display_name, name_fill_override"),
         supabase.from("markets").select("id, code, name, sort_order, display_color, display_font_color").order("sort_order"),
-        supabase.from("service_penetration_goals").select("service_key, section, sort_order, label, measure, goal, in_average"),
+        supabase.from("service_penetration_goals").select("service_key, section, sort_order, label, measure, goal, in_average, also_counts"),
       ]);
       const firstErr = [locRes, profRes, mktRes, goalRes].find((r) => r.error)?.error;
       if (firstErr) throw firstErr;

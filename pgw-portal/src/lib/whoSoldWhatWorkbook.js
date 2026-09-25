@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { downloadWorkbook } from "./excelStyle.js";
 import { PALETTE } from "./scorecardRules.js";
-import { CLOSE, unitsKey } from "./whoSoldWhat.js";
+import { CLOSE, unitsKey, serviceKeysOf } from "./whoSoldWhat.js";
 
 // =====================================================================
 // Who Sold What — the Excel export, in the shape of Matt's template:
@@ -63,11 +63,17 @@ export function buildWhoSoldWhatWorkbook(report) {
 
   // ---- Counts tab: the raw numbers every formula reads ----------------
   const cs = wb.addWorksheet("Counts", { views: [{ state: "frozen", xSplit: 1, ySplit: 1 }] });
-  // Raw units here, so "LOF / day" is just "LOF".
-  const countCols = ["Store", "Market", "Cars", "Days entered", "Sales", ...goals.map((g) => g.label.replace(/ \/ day$/, ""))];
+  // Raw units, one column per SERVICE (not per report column): LOF and
+  // LOF Premium each get their own, and the LOF report cell adds them
+  // (migration 71).
+  const services = [...new Set(goals.flatMap(serviceKeysOf))];
+  const nameOf = Object.fromEntries(goals.map((g) => [g.service_key, g.label]));
+  nameOf.kpi_su_lof = "LOF";
+  nameOf.kpi_su_lof_premium = "LOF Premium";
+  const countCols = ["Store", "Market", "Cars", "Days entered", "Sales", ...services.map((k) => nameOf[k] ?? k)];
   cs.addRow(countCols).font = { ...FONT, bold: true };
   const C_CARS = 3, C_DAYS = 4, C_SALES = 5;
-  const countColOf = Object.fromEntries(goals.map((g, i) => [g.service_key, 6 + i]));
+  const countColOf = Object.fromEntries(services.map((k, i) => [k, 6 + i]));
   const countRowOf = {};
   const marketName = Object.fromEntries(built.groups.map((g) => [g.market.id, g.market.name]));
   stores.forEach((s, i) => {
@@ -79,7 +85,7 @@ export function buildWhoSoldWhatWorkbook(report) {
       s.name, marketName[s.marketId] ?? "",
       entered ? Number(m.ro_count) : null, entered ? Number(m.days_with_data ?? 0) : null,
       entered ? Number(m.gross_sales ?? 0) : null,
-      ...goals.map((g) => (entered ? Number(m[unitsKey(g.service_key)] ?? 0) : null)),
+      ...services.map((k) => (entered ? Number(m[unitsKey(k)] ?? 0) : null)),
     ]);
   });
   const cFirst = 2, cLast = stores.length + 1;
@@ -142,7 +148,9 @@ export function buildWhoSoldWhatWorkbook(report) {
       ws.getCell(r, cCars).value = { formula: cars, result: row.cur.cars };
       ws.getCell(r, cCars).numFmt = INT;
       for (const g of sec.cols) {
-        const u = pooled ? cSum(countColOf[g.service_key]) : cRef(countColOf[g.service_key], countsRow);
+        // Units of the service plus any it also counts (LOF + LOF Premium).
+        const parts = serviceKeysOf(g).map((k) => (pooled ? cSum(countColOf[k]) : cRef(countColOf[k], countsRow)));
+        const u = parts.length > 1 ? `(${parts.join("+")})` : parts[0];
         const cell = ws.getCell(r, svcCol[g.service_key]);
         const result = row.cur.values[g.service_key];
         cell.value = g.measure === "pct" ? { formula: `${u}/${cars}`, result }

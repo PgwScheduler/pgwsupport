@@ -163,7 +163,7 @@ function GoalsEditor({ goals, onSave, onClose }) {
           <button onClick={onClose} className="text-content-muted hover:text-content-primary" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
         <p className="mb-3 text-xs text-content-muted">
-          % of cars, except LOF (per day). Blank = no goal (the column is not coloured). Changes apply for everyone.
+          % of cars, except LOF + Premium (oil changes per day). Blank = no goal (the column is not coloured). Changes apply for everyone.
         </p>
         {[1, 2, 3].map((s) => (
           <div key={s} className="mb-3">
