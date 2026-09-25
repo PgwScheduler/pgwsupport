@@ -14,6 +14,7 @@ import { TechTrackerView } from "./components/TechTrackerView.jsx";
 import { BonusView } from "./components/BonusView.jsx";
 import { ReportsView } from "./components/reports/ReportsView.jsx";
 import { canBuildReports } from "./lib/reportSpec.js";
+import { viewAllowed, HOME_OFFICE_DEFAULT_VIEW } from "./lib/homeOffice.js";
 import { DocumentsView } from "./components/DocumentsView.jsx";
 import { TrainingView } from "./components/TrainingView.jsx";
 import { UsersView } from "./components/users/UsersView.jsx";
@@ -60,7 +61,7 @@ function PendingApprovalScreen({ onSignOut }) {
 
 export default function App() {
   const { loadingSession, loadingProfile, session, profile, currentStore, stores, signOut, recoveryMode } = useAuth();
-  const [view, setView] = useState("dashboard");
+  const [chosenView, setView] = useState("dashboard");
 
   if (loadingSession) return <LoadingScreen />;
   if (recoveryMode) return <SetPasswordScreen />;
@@ -82,6 +83,10 @@ export default function App() {
       </FullScreenMessage>
     );
   }
+
+  // A screen hidden for the Home Office (migration 68) falls back to
+  // Payroll while it is selected; the choice comes back on a real store.
+  const view = viewAllowed(chosenView, currentStore) ? chosenView : HOME_OFFICE_DEFAULT_VIEW;
 
   return (
     <Shell view={view} setView={setView}>

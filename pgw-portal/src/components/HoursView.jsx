@@ -6,8 +6,9 @@ import { thisWeekStart, weekLabel, weeksInRange, daysForWeek } from "../lib/week
 import { useDateRange } from "../context/DateRangeProvider.jsx";
 import { DateRangeControl } from "./DateRangeControl.jsx";
 import {
-  computeStoreRow, computePayRow, computePayrollSummary, POSITIONS, TARGETS,
+  computeStoreRow, computePayRow, computePayrollSummary, TARGETS, positionsForBrand, canBeSalaried,
 } from "../lib/payrollMath.js";
+import { isHomeOffice } from "../lib/homeOffice.js";
 import { money, pct, numOrDash } from "../lib/format.js";
 import { exportPayrollCSV, printPayroll } from "../lib/payrollExport.js";
 import { SpeedeeHoursView } from "./SpeedeeHoursView.jsx";
@@ -83,6 +84,12 @@ function MidasHoursView({ store, cutover, onNavigate }) {
   }, [weekList, week]);
 
   const weekIdx = weekList.indexOf(week);
+  // The Home Office (migration 68) runs this same grid with no sales,
+  // turned hours or flat rate: only hours and pay are shown, and 'Office'
+  // is the only position.
+  const office = isHomeOffice(store);
+  const positions = positionsForBrand(store.brand, office);
+  const defaultPos = office ? "office" : "tech";
   const [profileId, setProfileId] = useState(null); // employee whose profile panel is open
   const {
     rows, dates, isDaily, privileged, rpcSummary, flatFlags, loading, error,
@@ -95,7 +102,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
   const [ov, setOv] = useState({}); // { [employeeId]: { field: rawValue } }
   const timers = useRef({});
   const [newName, setNewName] = useState("");
-  const [newPos, setNewPos] = useState("tech");
+  const [newPos, setNewPos] = useState(defaultPos);
 
   // Reset optimistic overrides when the store or week changes.
   useEffect(() => {
@@ -166,7 +173,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
   const onAdd = async () => {
     const emp = await addEmployee({ full_name: newName.trim(), position: newPos });
     setNewName("");
-    setNewPos("tech");
+    setNewPos(defaultPos);
     if (emp) setProfileId(emp.id);
   };
 
@@ -201,7 +208,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
               </GhostBtn>
             </div>
             <DateRangeControl />
-            {isDaily && (
+            {isDaily && !office && (
               <DayModeToggle modes={DAY_MODES} value={dayMode} onChange={setDayMode} />
             )}
             <GhostBtn onClick={() => exportPayrollCSV(store, week, merged, privileged, summary, dates, dayLabels)} disabled={rows.length === 0}>
@@ -245,13 +252,15 @@ function MidasHoursView({ store, cutover, onNavigate }) {
         </p>
       )}
 
-      {/* Payroll % summary */}
+      {/* Payroll % summary — not for the Home Office, which has no sales */}
+      {!office && (
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <SummaryStat label="Actual Sales" value={actualSales == null ? "—" : money(actualSales)} />
         <SummaryStat label="Total Payroll %" value={pct(totalPct)} target={TARGETS.total} ratio={totalPct} />
         <SummaryStat label="CST % (mgr + front)" value={pct(cstPct)} target={TARGETS.cst} ratio={cstPct} />
         <SummaryStat label="VST % (techs)" value={pct(vstPct)} target={TARGETS.vst} ratio={vstPct} />
       </div>
+      )}
       {privileged && summary && (
         <p className="mb-3 text-xs text-content-muted">
           Payroll dollars: <span className="font-semibold text-content-secondary">{money(summary.payrollDollars || 0)}</span>{" "}
@@ -282,29 +291,33 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                 </>
               )}
               <Th className={isDaily ? "border-l border-hairline-strong" : ""}>Total Hrs</Th>
-              {!isDaily && (
+              {!isDaily && !office && (
                 <>
                   <Th>Turn Other</Th>
                   <Th>Turn Here</Th>
                 </>
               )}
-              <Th>Total Turn</Th>
-              {isDaily && <Th>Other Str</Th>}
-              <Th>Prod.</Th>
-              <Th>Actual Sales</Th>
-              <Th>Sales Req.</Th>
-              <Th>% Goal</Th>
-              <Th>WOs</Th>
-              <Th>ARO</Th>
-              <Th>FLAT</Th>
+              {!office && (
+                <>
+                  <Th>Total Turn</Th>
+                  {isDaily && <Th>Other Str</Th>}
+                  <Th>Prod.</Th>
+                  <Th>Actual Sales</Th>
+                  <Th>Sales Req.</Th>
+                  <Th>% Goal</Th>
+                  <Th>WOs</Th>
+                  <Th>ARO</Th>
+                  <Th>FLAT</Th>
+                </>
+              )}
               {privileged && (
                 <>
                   <Th className="border-l border-hairline-strong">Rate / Sal</Th>
-                  <Th>Flat Rate</Th>
+                  {!office && <Th>Flat Rate</Th>}
                   <Th>Hrly Earn</Th>
                   <Th>OT</Th>
                   <Th>Tot Hrly</Th>
-                  <Th>Tot Flat</Th>
+                  {!office && <Th>Tot Flat</Th>}
                   <Th>Bonus</Th>
                   <Th>Incent.</Th>
                   <Th>Paycheck</Th>
@@ -327,7 +340,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                       value={r.employee.position}
                       onChange={(e) => updateEmployee(empId, { position: e.target.value })}
                     >
-                      {POSITIONS.map(([k, l]) => (
+                      {positions.map(([k, l]) => (
                         <option key={k} value={k}>{l}</option>
                       ))}
                     </select>
@@ -364,7 +377,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                       {/* Only the GM is salaried and left out of
                           payroll-to-sales. Assistants stay in, so this is
                           a per-person fact, not a position. */}
-                      {r.employee.position === "manager" && privileged && (
+                      {canBeSalaried(r.employee.position) && privileged && (
                         <label className="inline-flex items-center gap-1 text-[10px] text-content-muted">
                           <input
                             type="checkbox"
@@ -373,7 +386,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                               updateEmployee(empId, { is_store_manager: e.target.checked })
                             }
                           />
-                          Store manager (salaried)
+                          {r.employee.position === "office" ? "Salaried" : "Store manager (salaried)"}
                         </label>
                       )}
                     </div>
@@ -402,12 +415,14 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                   <td className={compCell + (isDaily ? " border-l border-hairline-strong" : "")}>
                     {numOrDash(sc.totalHours)}
                   </td>
-                  {!isDaily && (
+                  {!isDaily && !office && (
                     <>
                       <td className={roCell} title="Closed week">{numOrDash(r.mEntry.hrs_turned_other)}</td>
                       <td className={roCell} title="Closed week">{numOrDash(r.mEntry.hrs_turned_here)}</td>
                     </>
                   )}
+                  {!office && (
+                  <>
                   <td className={compCell}>{numOrDash(sc.totalTurned)}</td>
                   {isDaily && (
                     <td className={compCell}>{numOrDash(r.mEntry.total_hours_other)}</td>
@@ -430,6 +445,8 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                       <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ backgroundColor: T.accentSoftBg, color: T.accentSoftText }}>FLAT</span>
                     )}
                   </td>
+                  </>
+                  )}
 
                   {privileged && (
                     <>
@@ -440,6 +457,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                       <td className="border-l border-hairline-strong px-1 py-1.5 text-right">
                         <RateLink onClick={() => setProfileId(empId)} value={isSalaried ? r.mRate.manager_salary : r.mRate.hourly_rate} />
                       </td>
+                      {!office && (
                       <td className="px-1 py-1.5 text-right">
                         {isSalaried ? <span className="text-content-muted">x</span>
                           : r.employee.position === "tech" ? (
@@ -450,10 +468,11 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                             <RateLink onClick={() => setProfileId(empId)} value={r.mRate.flat_rate_per_hour} />
                           )}
                       </td>
+                      )}
                       <td className={compCell}>{isSalaried ? "x" : money(pc.hourlyEarned)}</td>
                       <td className={compCell}>{isSalaried ? "x" : money(pc.otEarned)}</td>
                       <td className={compCell}>{isSalaried ? "x" : money(pc.totalHourly)}</td>
-                      <td className={compCell}>{isSalaried ? "x" : money(pc.totalFlat)}</td>
+                      {!office && <td className={compCell}>{isSalaried ? "x" : money(pc.totalFlat)}</td>}
                       <NumCell {...{ empId, field: "bonus", val, commit, server: r.mPay.bonus }} />
                       <NumCell {...{ empId, field: "incentives", val, commit, server: r.mPay.incentives }} />
                       <td className={compCell} style={{ color: T.accentSoftText }}>{money(pc.paycheck)}</td>
@@ -502,7 +521,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
           value={newPos}
           onChange={(e) => setNewPos(e.target.value)}
         >
-          {POSITIONS.map(([k, l]) => (
+          {positions.map(([k, l]) => (
             <option key={k} value={k}>{l}</option>
           ))}
         </select>

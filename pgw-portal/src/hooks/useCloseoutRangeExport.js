@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../context/AuthProvider.jsx";
+import { revenueStores } from "../lib/homeOffice.js";
 
 // Exports every closeout the current user may see in a date range as one .xlsx.
 // RLS (can_access_location) does the scoping: a store manager gets their store,
@@ -47,7 +48,8 @@ export function useCloseoutRangeExport() {
           return { count: 0 };
         }
 
-        const accessibleStores = (stores ?? []).map((s) => ({
+        // No cash drawer at the Home Office, so no sheet for it.
+        const accessibleStores = revenueStores(stores).map((s) => ({
           storeNumber: s.store_number,
           storeName: s.name,
         }));

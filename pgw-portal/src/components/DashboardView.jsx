@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Banknote, Clock, FileSpreadsheet } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
+import { revenueStores } from "../lib/homeOffice.js";
 import { useDashboard } from "../hooks/useDashboard.js";
 import { computeTotals } from "../lib/drawerMath.js";
 import { money } from "../lib/format.js";
@@ -24,7 +25,8 @@ function StatCard({ label, value, sub, tone }) {
 }
 
 export function DashboardView({ store, onNavigate }) {
-  const { stores } = useAuth();
+  // The Home Office has no sales to show (migration 68).
+  const stores = revenueStores(useAuth().stores);
   const {
     latestDrawer, weekRows, docCount, week, cutover, isDaily, payrollToSales, loading, error,
   } = useDashboard(store.id);

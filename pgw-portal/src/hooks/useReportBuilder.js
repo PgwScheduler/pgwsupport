@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../context/AuthProvider.jsx";
+import { revenueStores } from "../lib/homeOffice.js";
 import { useDateRange } from "../context/DateRangeProvider.jsx";
 import {
   DEFAULT_MAX_ROWS,
@@ -30,7 +31,10 @@ import { rangeFor, rangeLabel } from "../lib/dateRange.js";
 const isAdmin = (role) => role === "admin" || role === "master";
 
 export function useReportBuilder() {
-  const { stores, currentStore, role } = useAuth();
+  // The Home Office earns no revenue and report_build() skips it
+  // (migration 68), so it is not offered as a store to report on.
+  const { stores: allStores, currentStore, role } = useAuth();
+  const stores = useMemo(() => revenueStores(allStores), [allStores]);
   const { from, to, preset, setPreset } = useDateRange();
 
   const [catalog, setCatalog] = useState([]);
