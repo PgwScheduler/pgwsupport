@@ -78,6 +78,7 @@
   --shift-teal: #56D4DD;    /* TRN  10.39:1 */
   --shift-green: #3FB950;   /* HOL   7.24:1 */
   --shift-magenta: #F778BA; /* OPEN  6.75:1 — the one that should catch the eye */
+  --shift-lime: #9BE06B;    /* CO   11.62:1 — hue 95, 53 degrees clear of the warning yellow; far lighter than HOL green (migration 69) */
 
   /* Report tiers (Matt's reports). Green / red / yellow reuse the status
      tokens; these are the three metal tiers. Text on its own tint:

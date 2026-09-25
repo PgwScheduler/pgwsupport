@@ -61,6 +61,7 @@ export default {
           teal: "var(--shift-teal)",
           green: "var(--shift-green)",
           magenta: "var(--shift-magenta)",
+          lime: "var(--shift-lime)",
         },
       },
     },
