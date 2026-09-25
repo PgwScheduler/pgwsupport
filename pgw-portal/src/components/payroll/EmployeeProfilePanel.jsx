@@ -4,7 +4,7 @@ import { useEmployeeProfile } from "../../hooks/useEmployeeProfile.js";
 import { usePayrollConfig } from "../../hooks/usePayrollConfig.js";
 import { money } from "../../lib/format.js";
 import { LEGACY_DATE, RATE_TYPES, firstPayWeek, rowOn, weeksAlreadyStarted } from "../../lib/payRates.js";
-import { positionsForBrand } from "../../lib/payrollMath.js";
+import { positionsForBrand, canBeSalaried } from "../../lib/payrollMath.js";
 import { asDate, iso, shiftWeek, thisWeekStart, weekEndOf } from "../../lib/weekUtils.js";
 import { Field, GhostBtn, PrimaryBtn, inputCls } from "../ui.jsx";
 
@@ -132,7 +132,7 @@ function Details({ e, privileged, onSave }) {
   const [saving, setSaving] = useState(false);
   useEffect(() => setF(initial()), [e]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const positions = positionsForBrand(e.location?.brand);
+  const positions = positionsForBrand(e.location?.brand, e.location?.is_home_office);
   const dirty = JSON.stringify(f) !== JSON.stringify(initial());
   const set = (k) => (ev) => setF((x) => ({ ...x, [k]: ev.target.type === "checkbox" ? ev.target.checked : ev.target.value }));
 
@@ -158,7 +158,7 @@ function Details({ e, privileged, onSave }) {
       employee_number: f.employee_number.trim() || null,
     };
     // Only admin/master see the salaried switch on the grid; same here.
-    if (privileged) patch.is_store_manager = f.position === "manager" && f.is_store_manager;
+    if (privileged) patch.is_store_manager = canBeSalaried(f.position) && f.is_store_manager;
     const { error } = await onSave(patch);
     setSaving(false);
     setMsg(error ? { kind: "error", text: error.message } : { kind: "ok", text: "Saved." });
@@ -200,10 +200,12 @@ function Details({ e, privileged, onSave }) {
           <input className={inputCls} value={f.employee_number} onChange={set("employee_number")} placeholder="Optional" />
         </Field>
       </div>
-      {privileged && f.position === "manager" && (
+      {privileged && canBeSalaried(f.position) && (
         <label className="inline-flex items-center gap-2 text-sm text-content-primary">
           <input type="checkbox" className="accent-accent" checked={f.is_store_manager} onChange={set("is_store_manager")} />
-          Store manager (salaried) — paid the weekly salary, left out of payroll-to-sales
+          {f.position === "office"
+            ? "Salaried — paid the weekly salary instead of hourly"
+            : "Store manager (salaried) — paid the weekly salary, left out of payroll-to-sales"}
         </label>
       )}
       <p className="text-xs text-content-muted">
@@ -292,7 +294,7 @@ function Employment({ e, privileged, onEnd, onReactivate }) {
 // ---------------------------------------------------------------------
 function Pay({ e, history, techRates, cutover, onSave, onRemove, onNavigate }) {
   const isTech = e.position === "tech";
-  const isSalaried = e.position === "manager" && e.is_store_manager;
+  const isSalaried = canBeSalaried(e.position) && e.is_store_manager;
   const weekStart = thisWeekStart(cutover);
   const [type, setType] = useState(isSalaried ? "salary" : "hourly");
   const [amount, setAmount] = useState("");

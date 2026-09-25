@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { canBuildReports } from "../lib/reportSpec.js";
+import { viewAllowed, revenueStores } from "../lib/homeOffice.js";
 import { LogoMark, T } from "./ui.jsx";
 import { StorePicker } from "./StorePicker.jsx";
 import { ChangePasswordModal } from "./ChangePasswordModal.jsx";
@@ -59,11 +60,14 @@ function scopeLabel(profile, storeCount) {
 export function Shell({ view, setView, children }) {
   const { profile, role, stores, currentStore, selectedStoreId, setSelectedStoreId, signOut } = useAuth();
   const [showChangePassword, setShowChangePassword] = useState(false);
+  // The Home Office has no sales, cash or technicians (migration 68), so
+  // those screens drop out of the menu while it is selected.
   const navItems = [
     ...NAV,
     ...(canBuildReports(role) ? REPORT_NAV : []),
     ...(role === "master" ? MASTER_NAV : []),
-  ];
+  ].filter((n) => viewAllowed(n.key, currentStore));
+  const storeCount = revenueStores(stores).length;
 
   return (
     <div className="pgw-root flex min-h-screen bg-surface-page text-content-primary">
@@ -94,9 +98,10 @@ export function Shell({ view, setView, children }) {
           <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-content-muted">
             <Eye className="h-3 w-3" /> You can see
           </p>
-          <p className="pgw-display mt-1 text-sm font-bold text-content-primary">{scopeLabel(profile, stores.length)}</p>
+          <p className="pgw-display mt-1 text-sm font-bold text-content-primary">{scopeLabel(profile, storeCount)}</p>
           <p className="mt-0.5 text-xs text-content-muted">
-            {stores.length} store{stores.length === 1 ? "" : "s"}
+            {storeCount} store{storeCount === 1 ? "" : "s"}
+            {storeCount !== stores.length && " + Home Office"}
           </p>
         </div>
       </aside>
@@ -146,10 +151,14 @@ export function Shell({ view, setView, children }) {
         {currentStore && (
           <div className="flex items-center gap-1.5 border-b border-hairline bg-surface-card px-5 py-2 text-xs text-content-muted">
             <Building2 className="h-3.5 w-3.5" />
-            <span>{currentStore.district?.region?.name ?? "—"}</span>
-            <ChevronRight className="h-3 w-3" />
-            <span>{currentStore.district?.name ?? "—"}</span>
-            <ChevronRight className="h-3 w-3" />
+            {!currentStore.is_home_office && (
+              <>
+                <span>{currentStore.district?.region?.name ?? "—"}</span>
+                <ChevronRight className="h-3 w-3" />
+                <span>{currentStore.district?.name ?? "—"}</span>
+                <ChevronRight className="h-3 w-3" />
+              </>
+            )}
             <span className="font-medium text-content-secondary">
               #{currentStore.store_number} · {currentStore.name}
             </span>

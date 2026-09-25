@@ -6,10 +6,10 @@ import { csvEsc, downloadFile } from "./csv.js";
 import { money, pct, numOrDash } from "./format.js";
 import {
   computeStoreRow, computePayRow, computeSpeedeeStoreRow, computeSpeedeeRefRow,
-  POSITIONS, SPEEDEE_POSITIONS,
+  POSITIONS, SPEEDEE_POSITIONS, OFFICE_POSITIONS,
 } from "./payrollMath.js";
 
-const posLabel = (p) => POSITIONS.find(([k]) => k === p)?.[1] ?? p;
+const posLabel = (p) => [...POSITIONS, ...OFFICE_POSITIONS].find(([k]) => k === p)?.[1] ?? p;
 const speedeePosLabel = (p) => SPEEDEE_POSITIONS.find(([k]) => k === p)?.[1] ?? p;
 const d2 = (n) => (n == null ? "—" : Number(n).toFixed(2));
 

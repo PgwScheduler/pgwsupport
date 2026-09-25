@@ -38,8 +38,17 @@ export const SPEEDEE_POSITIONS = [
 // Speedee holds a single payroll % target.
 export const SPEEDEE_TARGET = 0.26;
 
-export const positionsForBrand = (brand) =>
-  brand === "speedee" ? SPEEDEE_POSITIONS : MIDAS_POSITIONS;
+// The Home Office (migration 68) runs the Midas payroll engine but has
+// exactly one position; the database refuses any other there, and refuses
+// 'office' at a store.
+export const OFFICE_POSITIONS = [["office", "Office"]];
+
+export const positionsForBrand = (brand, isHomeOffice = false) =>
+  isHomeOffice ? OFFICE_POSITIONS : brand === "speedee" ? SPEEDEE_POSITIONS : MIDAS_POSITIONS;
+
+// Salary keys off is_store_manager. At a store only the GM (a 'manager')
+// carries it; at the Home Office any 'office' person may (migration 68).
+export const canBeSalaried = (position) => position === "manager" || position === "office";
 
 export const num = (v) => {
   const n = typeof v === "number" ? v : parseFloat(v);

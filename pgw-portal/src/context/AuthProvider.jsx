@@ -12,7 +12,7 @@ const PROFILE_SELECT = `
 `;
 
 const STORE_SELECT = `
-  id, name, address, store_number, drawer_float, brand, district_id, is_sandbox,
+  id, name, address, store_number, drawer_float, brand, district_id, is_sandbox, is_home_office,
   district:district_id ( id, name, region_id, region:region_id ( id, name ) )
 `;
 
@@ -63,8 +63,10 @@ export function AuthProvider({ children }) {
         }
         // Never auto-select a sandbox store — see isSandbox above. Fall
         // back to the full list only if every store is a sandbox, which
-        // would mean there is nothing real to land on anyway.
-        const real = storeRows.filter((s) => !isSandbox(s));
+        // would mean there is nothing real to land on anyway. The Home
+        // Office (migration 68) is skipped too: office roles land on a
+        // store and pick the Home Office deliberately.
+        const real = storeRows.filter((s) => !isSandbox(s) && !s.is_home_office);
         return (real[0] ?? storeRows[0])?.id ?? null;
       });
     } else {
