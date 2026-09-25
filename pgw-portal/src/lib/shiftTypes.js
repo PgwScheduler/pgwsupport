@@ -11,7 +11,7 @@
 // so a mistyped row looks plain rather than disappearing.
 export const SHIFT_TOKENS = [
   "shift-neutral", "shift-blue", "shift-slate",
-  "shift-violet", "shift-teal", "shift-green", "shift-magenta",
+  "shift-violet", "shift-teal", "shift-green", "shift-magenta", "shift-lime",
 ];
 
 const FALLBACK = "shift-neutral";
