@@ -10,7 +10,11 @@ import { PRESETS, rangeLabel, rangeFor, daysBetween } from "../lib/dateRange.js"
 // Custom is two plain date inputs with NO min/max: any start, any end,
 // any length, across months and years freely. The only correction made
 // is swapping a backwards pair, which is a slip rather than an intent.
-export function DateRangeControl({ className = "" }) {
+// `align` is the edge the menu lines up with: "right" (the default) for a
+// control at the right of a header, so the menu opens leftward; "left"
+// for one at the left of a toolbar, where opening leftward would run the
+// menu under the sidebar.
+export function DateRangeControl({ className = "", align = "right" }) {
   const { preset, from, to, setPreset, setCustom } = useDateRange();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState({ from, to });
@@ -62,7 +66,7 @@ export function DateRangeControl({ className = "" }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-30 mt-1 w-64 rounded-lg border border-hairline-strong bg-surface-card p-1 shadow-xl">
+        <div className={"absolute z-30 mt-1 w-64 " + (align === "left" ? "left-0" : "right-0") + " rounded-lg border border-hairline-strong bg-surface-card p-1 shadow-xl"}>
           {PRESETS.map(([key, label]) => {
             const active = preset === key;
             // Show each preset's actual span, so "Last 3 months" is not a
