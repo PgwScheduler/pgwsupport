@@ -39,6 +39,31 @@ export const DIVISIONS = [
   ["Charleston", "Charleston"],
 ];
 
+// Store number -> the workbook's own name for it, in the order its store
+// lists run (Sheet2 rows 14-21; Florida's two columns read left, then
+// right). User decision 2026-10-01: these, not the report short names.
+// A store not listed here keeps tech_ranks()'s name and follows these.
+export const STORE_NAMES = [
+  // Columbia - East Division
+  ["5254", "Gervais"], ["3984", "Decker"], ["3303", "Millwood"], ["3935", "Two Notch"], ["3937", "Hardscrabble"], ["3305", "Greenville"],
+  // Columbia - West Division
+  ["3979", "Lake Murray"], ["3276", "North Lake"], ["3936", "Bush"], ["3278", "Knox"], ["3229", "Harbison"],
+  // Florida
+  ["2321", "Beach"], ["3111", "Sunbeam"], ["3548", "Atlantic"], ["3136", "Lem Turner"], ["3292", "Orange Park"],
+  ["3211", "Gainesville"], ["2322", "Oviedo"], ["2320", "N Semoran"],
+  // PGW North
+  ["3831", "Manassas"], ["3473", "Duke St"], ["3598", "Rhode Island ave"], ["3726", "Fairfax"], ["3923", "Clinton"],
+  ["3296", "Temple Hills"], ["3593", "Forestville"], ["3485", "Capitol Heights"],
+  // Charleston
+  ["3302", "Sam Ritt"], ["3287", "Mt Pleasant"], ["5253", "Main St"], ["3182", "Trolley"], ["3385", "Rivers"],
+  ["3377", "Florence"], ["3938", "Sumter"],
+];
+const STORE_NAME = new Map(STORE_NAMES);
+const STORE_ORDER = new Map(STORE_NAMES.map(([n], i) => [n, i]));
+export const storeName = (number, fallback) => STORE_NAME.get(number) ?? fallback;
+const byWorkbookOrder = (a, b) =>
+  (STORE_ORDER.get(a.store_number) ?? 999) - (STORE_ORDER.get(b.store_number) ?? 999) || a.name.localeCompare(b.name);
+
 export const medalFor = (rank) => MEDALS[rank] ?? null;
 
 export function proficiency(turned, worked) {
@@ -61,7 +86,10 @@ export function buildTechRanks(raw) {
 
   const divisions = [...(raw?.divisions ?? [])]
     .sort((a, b) => (order.get(a.name) ?? 99) - (order.get(b.name) ?? 99) || a.name.localeCompare(b.name))
-    .map((d) => ({ id: d.district_id, name: d.name, label: heading.get(d.name) ?? d.name, stores: d.stores ?? [] }));
+    .map((d) => ({
+      id: d.district_id, name: d.name, label: heading.get(d.name) ?? d.name,
+      stores: [...(d.stores ?? [])].sort(byWorkbookOrder).map((s) => ({ ...s, name: storeName(s.store_number, s.name) })),
+    }));
   const labelOf = Object.fromEntries(divisions.map((d) => [d.id, d.label]));
 
   const techs = (raw?.techs ?? []).map((t) => {
@@ -69,7 +97,7 @@ export function buildTechRanks(raw) {
     return {
       id: t.employee_id, name: (t.name ?? "").trim() || "(no name)",
       divisionId: t.district_id, division: labelOf[t.district_id] ?? "",
-      storeNumber: t.store_number, storeName: t.store_name, storeCount: t.store_count ?? 1,
+      storeNumber: t.store_number, storeName: storeName(t.store_number, t.store_name), storeCount: t.store_count ?? 1,
       hoursTurned, hoursWorked, proficiency: proficiency(hoursTurned, hoursWorked),
     };
   });

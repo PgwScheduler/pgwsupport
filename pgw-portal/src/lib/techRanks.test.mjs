@@ -2,7 +2,7 @@
 // Run: node src/lib/techRanks.test.mjs
 // The fixture is the September 2026 workbook ("Tech ranks sept 2026.xlsx",
 // Sheet2): the report must reproduce its top 20 and its market counts.
-import { buildTechRanks, compareTechs, medalFor, periodLabels, proficiency } from "./techRanks.js";
+import { STORE_NAMES, buildTechRanks, compareTechs, medalFor, periodLabels, proficiency } from "./techRanks.js";
 import { buildTechRanksWorkbook } from "./techRanksWorkbook.js";
 
 let pass = 0, fail = 0;
@@ -57,6 +57,20 @@ eq("no hours worked -> blank proficiency", proficiency(10, 0), null);
 eq("blank proficiency ranks below a real one on a tie",
   [{ name: "A", hoursTurned: 5, proficiency: null }, { name: "B", hoursTurned: 5, proficiency: 0.1 }].sort(compareTechs).map((t) => t.name), ["B", "A"]);
 eq("medals", [1, 2, 3, 4].map((n) => medalFor(n)?.fill ?? null), ["FFD700", "C0C0C0", "CD7F32", null]);
+
+// Store lists: the workbook's names, in its order, whatever order and
+// names tech_ranks() sends; an unlisted store follows under its own name.
+const named = buildTechRanks({
+  divisions: [{ district_id: "c", name: "Charleston", stores: [
+    { store_number: "3938", name: "Wesmark", has_data: true }, { store_number: "9999", name: "Acme", has_data: false },
+    { store_number: "3287", name: "MP Midas", has_data: true }, { store_number: "3302", name: "Sam Ritt", has_data: true },
+  ] }],
+  techs: [{ employee_id: "x", name: "X", district_id: "c", store_number: "3938", store_name: "Wesmark", hours_turned: 1, hours_worked: 1 }],
+});
+eq("store names + order from the workbook", named.divisions[0].stores.map((s) => s.name), ["Sam Ritt", "Mt Pleasant", "Sumter", "Acme"]);
+eq("has_data survives the rename", named.divisions[0].stores.map((s) => s.has_data), [true, true, true, false]);
+eq("a tech's store uses the workbook name too", named.top[0].storeName, "Sumter");
+eq("all 34 workbook stores mapped once", [STORE_NAMES.length, new Set(STORE_NAMES.map((s) => s[0])).size], [34, 34]);
 
 const unknown = buildTechRanks({ divisions: [{ district_id: "x", name: "Gulf", stores: [] }, { district_id: "y", name: "Florida", stores: [] }], techs: [] });
 eq("an unknown district follows the known ones, under its own name", unknown.divisions.map((d) => d.label), ["Florida", "Gulf"]);
