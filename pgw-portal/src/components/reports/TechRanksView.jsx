@@ -100,7 +100,7 @@ export function TechRanksView() {
     <div className="space-y-4">
       <Card className="p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <DateRangeControl />
+          <DateRangeControl align="left" />
           <div className="ml-auto">
             <GhostBtn onClick={doExport} disabled={!report || exporting}>
               <FileSpreadsheet className="h-4 w-4" /> {exporting ? "Building…" : "Export to Excel"}
