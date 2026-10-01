@@ -11,6 +11,7 @@ import { MeasurePicker } from "./MeasurePicker.jsx";
 import { PriorYearImportModal } from "./PriorYearImportModal.jsx";
 import { ScorecardView } from "./ScorecardView.jsx";
 import { WhoSoldWhatView } from "./WhoSoldWhatView.jsx";
+import { TechRanksView } from "./TechRanksView.jsx";
 import {
   GROUP_BY, formatCell, groupByLabel, hasAttributedPay, hasRepeatedMonthly,
 } from "../../lib/reportSpec.js";
@@ -56,28 +57,34 @@ function Notice({ tone = "info", icon: Icon = Info, children }) {
   );
 }
 
-// Three tabs: Matt's daily reports (Reports 1, 2, 5 and the five presets
-// that replace Task 10's), his monthly Who Sold What (migration 70), and
-// the generic Report Builder, unchanged.
+// Four tabs: Matt's daily reports (Reports 1, 2, 5 and the five presets
+// that replace Task 10's), his monthly Who Sold What (migration 70), Tech
+// Ranks (migration 74, district and above only -- tech_ranks() refuses a
+// store login), and the generic Report Builder, unchanged.
 export function ReportsView() {
   const [area, setArea] = useState("daily");
+  const { role } = useAuth();
+  const tabs = [["daily", "Daily Reports"], ["wsw", "Who Sold What"],
+    ...(role === "store" ? [] : [["ranks", "Tech Ranks"]]), ["builder", "Report Builder"]];
   return (
     <div className="space-y-4">
       <SectionHeader
         title="Reports"
         subtitle={area === "daily" ? "Matt's daily reports, from the stores' tic sheets."
           : area === "wsw" ? "Who Sold What: services sold as a % of cars, by store, month over month."
+          : area === "ranks" ? "Tech Ranks: each division's top 10 and the company top 20 by hours turned."
           : "Build any report from portal data."}
       />
       <div role="tablist" className="flex gap-1 border-b border-hairline">
-        {[["daily", "Daily Reports"], ["wsw", "Who Sold What"], ["builder", "Report Builder"]].map(([k, label]) => (
+        {tabs.map(([k, label]) => (
           <button key={k} role="tab" aria-selected={area === k} onClick={() => setArea(k)}
             className={"border-b-2 px-3 py-2 text-sm font-medium " + (area === k ? "border-accent text-content-primary" : "border-transparent text-content-secondary hover:text-content-primary")}>
             {label}
           </button>
         ))}
       </div>
-      {area === "daily" ? <ScorecardView /> : area === "wsw" ? <WhoSoldWhatView /> : <ReportBuilder />}
+      {area === "daily" ? <ScorecardView /> : area === "wsw" ? <WhoSoldWhatView />
+        : area === "ranks" ? <TechRanksView /> : <ReportBuilder />}
     </div>
   );
 }
