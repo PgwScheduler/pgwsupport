@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { Lock, Trash2, Wrench, X } from "lucide-react";
+import { ArrowRightLeft, Lock, Trash2, Wrench, X } from "lucide-react";
+import { useAuth } from "../../context/AuthProvider.jsx";
 import { useEmployeeProfile } from "../../hooks/useEmployeeProfile.js";
 import { usePayrollConfig } from "../../hooks/usePayrollConfig.js";
 import { money } from "../../lib/format.js";
-import { LEGACY_DATE, RATE_TYPES, firstPayWeek, rowOn, weeksAlreadyStarted } from "../../lib/payRates.js";
+import { LEGACY_DATE, RATE_TYPES, firstPayWeek, ratesOn, rowOn, weeksAlreadyStarted } from "../../lib/payRates.js";
 import { positionsForBrand, canBeSalaried } from "../../lib/payrollMath.js";
-import { asDate, iso, shiftWeek, thisWeekStart, weekEndOf } from "../../lib/weekUtils.js";
+import { addDays, asDate, iso, shiftWeek, thisWeekStart, weekEndOf, weekStartOf } from "../../lib/weekUtils.js";
 import { Field, GhostBtn, PrimaryBtn, inputCls } from "../ui.jsx";
 
 // Employee profile (migration 56), opened by clicking a name on Payroll
@@ -18,6 +19,8 @@ const fmtDate = (d) =>
 const fmtShort = (d) => asDate(d).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 const todayIso = () => iso(new Date());
 const typeLabel = (k) => RATE_TYPES.find((t) => t.key === k)?.label ?? k;
+// "#3303" in a sentence; a store with no number (the sandbox) by name.
+const storeRef = (l) => (l?.store_number ? `#${l.store_number}` : l?.name ?? "the other store");
 const SOURCE_LABEL = { manual: "Profile", tech_tracker: "Tech Tracker", legacy: "Original rate" };
 
 function Section({ title, children, right }) {
@@ -41,7 +44,14 @@ function Msg({ kind, children }) {
 }
 
 export function EmployeeProfilePanel({ employeeId, onClose, onChanged, onNavigate }) {
-  const p = useEmployeeProfile(employeeId);
+  // A transfer (migration 76) links two rows. The panel follows the link
+  // itself, so the page that opened it needn't know.
+  const [viewId, setViewId] = useState(employeeId);
+  const [notice, setNotice] = useState(null);
+  useEffect(() => { setViewId(employeeId); setNotice(null); }, [employeeId]);
+  const open = (id) => { setNotice(null); setViewId(id); };
+  const p = useEmployeeProfile(viewId);
+  const { role, stores } = useAuth();
   // Pay waits for the cutover: it decides which weekday a pay week starts
   // on, and so which week a change first applies to.
   const { cutover } = usePayrollConfig();
@@ -82,10 +92,25 @@ export function EmployeeProfilePanel({ employeeId, onClose, onChanged, onNavigat
         </div>
 
         {p.error && <Msg kind="error">{p.error}</Msg>}
+        {notice && <div className="mb-4"><Msg kind="ok">{notice}</Msg></div>}
         {e && (
           <div className="space-y-5">
             <Details e={e} privileged={p.privileged} onSave={(patch) => changed(() => p.saveDetails(patch))} />
-            <Employment e={e} privileged={p.privileged}
+            <Employment key={e.id} e={e} privileged={p.privileged} transferredTo={p.transferredTo} onOpen={open}
+              canTransfer={["admin", "master", "district", "regional"].includes(role)}
+              transferForm={(close) => (
+                <TransferForm e={e} privileged={p.privileged} stores={stores} history={p.history} techRates={p.techRates}
+                  cutover={cutover} onCancel={close}
+                  onTransfer={async (args) => {
+                    const r = await changed(() => p.transfer(args));
+                    if (!r.error && r.id) {
+                      const to = stores.find((s) => s.id === args.toLocationId);
+                      open(r.id);
+                      setNotice(`Transferred. This is ${e.full_name}'s record at ${storeRef(to)}; their record at ${storeRef(e.location)} ended ${fmtDate(addDays(args.transferDate, -1))}.`);
+                    }
+                    return r;
+                  }} />
+              )}
               onEnd={(d) => changed(() => p.endEmployment(d))} onReactivate={() => changed(p.reactivate)} />
             {p.privileged && !cutover ? (
               <Section title="Pay"><p className="text-sm text-content-muted">Loading…</p></Section>
@@ -235,8 +260,9 @@ function Details({ e, privileged, onSave }) {
 }
 
 // ---------------------------------------------------------------------
-function Employment({ e, privileged, onEnd, onReactivate }) {
+function Employment({ e, privileged, transferredTo, canTransfer, transferForm, onOpen, onEnd, onReactivate }) {
   const [open, setOpen] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [lastDay, setLastDay] = useState(todayIso());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -255,17 +281,35 @@ function Employment({ e, privileged, onEnd, onReactivate }) {
 
   return (
     <Section title="Employment">
-      {!ended && !open && (
+      {e.transfer_date && (
+        <p className="mb-3 text-sm text-content-secondary">
+          At this store since {fmtDate(e.transfer_date)}, transferred from{" "}
+          {e.transferred_from ? (
+            <button type="button" className="font-medium text-accent-text hover:underline" onClick={() => onOpen(e.transferred_from.id)}>
+              {storeRef(e.transferred_from.location)}{e.transferred_from.location?.store_number ? ` · ${e.transferred_from.location.name}` : ""}
+            </button>
+          ) : "another store"}.
+        </p>
+      )}
+      {!ended && !open && !transferring && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-content-primary">
             Active{e.hire_date ? ` since ${fmtDate(e.hire_date)}` : ""}.
           </p>
-          <button type="button" onClick={() => setOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-danger-border px-3 py-1.5 text-sm font-medium text-danger hover:bg-danger-tint">
-            <Trash2 className="h-4 w-4" /> End employment
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {canTransfer && (
+              <GhostBtn type="button" onClick={() => setTransferring(true)} className="py-1.5">
+                <ArrowRightLeft className="h-4 w-4" /> Transfer to another store
+              </GhostBtn>
+            )}
+            <button type="button" onClick={() => setOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-danger-border px-3 py-1.5 text-sm font-medium text-danger hover:bg-danger-tint">
+              <Trash2 className="h-4 w-4" /> End employment
+            </button>
+          </div>
         </div>
       )}
+      {!ended && transferring && transferForm(() => setTransferring(false))}
       {!ended && open && (
         <div className="space-y-3 rounded-lg border border-danger-border bg-danger-tint p-3">
           <Field label="Last day worked">
@@ -286,7 +330,18 @@ function Employment({ e, privileged, onEnd, onReactivate }) {
           </div>
         </div>
       )}
-      {ended && (
+      {ended && transferredTo && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-content-primary">
+            Transferred to {storeRef(transferredTo.location)}{transferredTo.location?.store_number ? ` · ${transferredTo.location.name}` : ""} on {fmtDate(transferredTo.transfer_date)}.
+            {e.termination_date && ` Last day here: ${fmtDate(e.termination_date)}.`}
+          </p>
+          <GhostBtn type="button" onClick={() => onOpen(transferredTo.id)}>
+            Open {storeRef(transferredTo.location)} record
+          </GhostBtn>
+        </div>
+      )}
+      {ended && !transferredTo && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-content-primary">
             {e.termination_date ? `Last day worked: ${fmtDate(e.termination_date)}.` : "Removed from the roster before end dates were recorded."}
@@ -302,6 +357,147 @@ function Employment({ e, privileged, onEnd, onReactivate }) {
         </div>
       )}
     </Section>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Transfer (migration 76): ends this record the day before and starts a
+// linked one at the new store, in one database call. District and
+// regional managers see only their own stores in the picker (locations
+// are RLS-scoped); new pay and the store-manager flag are admin/master.
+const RATE_FIELDS = {
+  hourly: { label: "Hourly", unit: "per hour" },
+  flat: { label: "Flat", unit: "per turned hour" },
+  guarantee: { label: "Guarantee", unit: "per hour" },
+  salary: { label: "Salary", unit: "per week" },
+};
+
+function TransferForm({ e, privileged, stores, history, techRates, cutover, onCancel, onTransfer }) {
+  const tomorrow = addDays(todayIso(), 1);
+  const startedHere = [e.hire_date, e.transfer_date].filter(Boolean).sort().pop() ?? null;
+  const options = stores.filter((s) => s.id !== e.location_id && (privileged || !s.is_home_office));
+  const [toId, setToId] = useState("");
+  const [date, setDate] = useState(todayIso());
+  const [position, setPosition] = useState(e.position ?? "");
+  const [isGm, setIsGm] = useState(privileged && !!e.is_store_manager);
+  const [rates, setRates] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const to = options.find((s) => s.id === toId) ?? null;
+  const positions = to ? positionsForBrand(to.brand, to.is_home_office) : [];
+  // Keep the position when the new store has it; otherwise make them pick.
+  useEffect(() => {
+    if (to) setPosition((p) => (positions.some(([k]) => k === p) ? p : positions.some(([k]) => k === e.position) ? e.position : ""));
+  }, [toId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const salaried = canBeSalaried(position) && isGm;
+  const isTech = position === "tech";
+  const rateKeys = salaried ? ["salary"] : isTech ? ["hourly", "flat", "guarantee"] : ["hourly", "flat"];
+  const carried = date ? ratesOn(history, date) : null;
+  const carriedTech = techRates.find((t) => t.effective_date <= date) ?? null;
+  const carriedOf = (k) => k === "hourly" ? carried?.hourly_rate : k === "flat" ? carried?.flat_rate_per_hour
+    : k === "salary" ? carried?.manager_salary : carriedTech ? Number(carriedTech.guarantee_rate) : 0;
+  const changing = rateKeys.filter((k) => (rates[k] ?? "") !== "");
+  const midWeek = cutover && date && weekStartOf(date, cutover) !== date;
+  const first = cutover && date ? firstPayWeek(date, cutover) : null;
+
+  const submit = async () => {
+    if (!to) return setErr("Pick the store they're moving to.");
+    if (!date) return setErr("Enter their first day at the new store.");
+    if (date > tomorrow) return setErr("The transfer date can't be in the future. Transfer them once they've moved.");
+    if (startedHere && date <= startedHere) return setErr(`The first day at the new store must be after they started here (${fmtDate(startedHere)}).`);
+    if (!position) return setErr(`Pick their position at ${storeRef(to)}.`);
+    const out = {};
+    for (const k of changing) {
+      const n = Number(rates[k]);
+      if (!Number.isFinite(n) || n < 0) return setErr(`Enter a ${RATE_FIELDS[k].label.toLowerCase()} rate of 0 or more, or leave it blank to carry it over.`);
+      out[k] = Math.round(n * 100) / 100;
+    }
+    setBusy(true);
+    setErr(null);
+    const { error } = await onTransfer({ toLocationId: to.id, transferDate: date, position, isStoreManager: privileged && salaried, rates: out });
+    setBusy(false);
+    if (error) setErr(error.message);
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border border-hairline-strong bg-surface-page p-3">
+      <p className="text-sm font-medium text-content-primary">Transfer {e.full_name} to another store</p>
+      {options.length === 0 ? (
+        <p className="text-sm text-content-muted">There is no other store in your area to transfer them to.</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="To store">
+            <select className={inputCls} value={toId} onChange={(ev) => setToId(ev.target.value)}>
+              <option value="">— Pick a store —</option>
+              {options.map((s) => <option key={s.id} value={s.id}>#{s.store_number} · {s.name}</option>)}
+            </select>
+          </Field>
+          <Field label="First day at the new store">
+            <input type="date" className={inputCls} value={date} max={tomorrow}
+              min={startedHere ? addDays(startedHere, 1) : undefined} onChange={(ev) => setDate(ev.target.value)} />
+          </Field>
+          <Field label="Position there">
+            <select className={inputCls} value={position} onChange={(ev) => setPosition(ev.target.value)} disabled={!to}>
+              {!position && <option value="">{to ? "— Pick —" : "Pick a store first"}</option>}
+              {positions.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </Field>
+        </div>
+      )}
+      {privileged && to && canBeSalaried(position) && (
+        <label className="inline-flex items-center gap-2 text-sm text-content-primary">
+          <input type="checkbox" className="accent-accent" checked={isGm} onChange={(ev) => setIsGm(ev.target.checked)} />
+          {position === "office" ? "Salaried at the new location" : `Store manager (salaried) at ${storeRef(to)}`}
+        </label>
+      )}
+
+      {privileged && to && position && (
+        <div className="space-y-2 rounded-md border border-hairline p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-content-secondary">Pay at the new store</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {rateKeys.map((k) => (
+              <Field key={k} label={`${RATE_FIELDS[k].label} · ${RATE_FIELDS[k].unit}`}>
+                <input className={inputCls} inputMode="decimal" value={rates[k] ?? ""}
+                  onChange={(ev) => setRates((r) => ({ ...r, [k]: ev.target.value }))}
+                  placeholder={`${money(Number(carriedOf(k) ?? 0))} (same)`} />
+              </Field>
+            ))}
+          </div>
+          <p className="text-xs text-content-muted">
+            Leave a rate blank to carry it over unchanged.
+            {changing.length > 0 && first && ` New rates are first paid in the week of ${fmtShort(first)} – ${fmtShort(weekEndOf(first, cutover))}.`}
+          </p>
+        </div>
+      )}
+
+      {to && (
+        <ul className="list-disc space-y-1 pl-5 text-xs text-content-secondary">
+          <li>Their record at {storeRef(e.location)} ends on {date ? fmtDate(addDays(date, -1)) : "the day before"}. Weeks already worked there stay exactly as they are.</li>
+          <li>A new record starts at {storeRef(to)} on {date ? fmtDate(date) : "that day"}, with the same name, hire date, birthday and ADP IDs{privileged ? ", and their pay rates unless you change them above" : " and the same pay rates"}.</li>
+          <li>Their Tech Tracker slot at {storeRef(e.location)} is freed. Their shifts there from that day on become open shifts; time off is removed.</li>
+          <li>A Horizon slot at {storeRef(e.location)} is not released automatically. An administrator releases it and assigns one at {storeRef(to)}.</li>
+          {!privileged && e.is_store_manager && (
+            <li>They're salaried here. At {storeRef(to)} they start on their hourly rates until an administrator marks them salaried.</li>
+          )}
+        </ul>
+      )}
+      {to && midWeek && e.is_store_manager && (
+        <Msg kind="warn">
+          {fmtDate(date)} is mid-week. {storeRef(e.location)} still pays a salaried manager the full weekly salary for that week,
+          on top of what {storeRef(to)} pays them for the same week.
+          Pick the first day of a pay week ({fmtDate(firstPayWeek(date, cutover))}) to avoid that.
+        </Msg>
+      )}
+      {err && <Msg kind="error">{err}</Msg>}
+      <div className="flex justify-end gap-2">
+        <GhostBtn type="button" onClick={onCancel} disabled={busy}>Cancel</GhostBtn>
+        <PrimaryBtn type="button" onClick={submit} disabled={busy || !to}>
+          <ArrowRightLeft className="h-4 w-4" /> {busy ? "Transferring…" : "Transfer"}
+        </PrimaryBtn>
+      </div>
+    </div>
   );
 }
 

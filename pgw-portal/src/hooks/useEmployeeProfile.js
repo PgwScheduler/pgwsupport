@@ -10,9 +10,15 @@ import { useAuth } from "../context/AuthProvider.jsx";
 const EMPLOYEE_SELECT = `
   id, location_id, full_name, position, active, is_store_manager,
   hire_date, termination_date, employee_number, adp_position_id, created_at,
-  rehire_date, birth_month, birth_day,
-  location:location_id ( name, store_number, brand, is_home_office )
+  rehire_date, birth_month, birth_day, transfer_date, transferred_from_id,
+  location:location_id ( name, store_number, brand, is_home_office ),
+  transferred_from:transferred_from_id ( id, location:location_id ( name, store_number ) )
 `;
+
+// The row a transfer created FROM this one (migration 76). Location-scoped
+// like every employees read, so a store user at the old store gets null
+// and sees an ordinary ending.
+const TRANSFERRED_TO_SELECT = "id, transfer_date, location:location_id ( name, store_number )";
 
 export function useEmployeeProfile(employeeId) {
   const { role } = useAuth();
@@ -20,12 +26,13 @@ export function useEmployeeProfile(employeeId) {
   const [employee, setEmployee] = useState(null);
   const [history, setHistory] = useState([]);
   const [techRates, setTechRates] = useState([]);
+  const [transferredTo, setTransferredTo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
     if (!employeeId) return;
-    const [e, h, t] = await Promise.all([
+    const [e, h, t, to] = await Promise.all([
       supabase.from("employees").select(EMPLOYEE_SELECT).eq("id", employeeId).maybeSingle(),
       privileged
         ? supabase.from("employee_pay_rate_history")
@@ -36,8 +43,9 @@ export function useEmployeeProfile(employeeId) {
         ? supabase.from("tech_pay_rates").select("effective_date, flat_rate, guarantee_rate")
             .eq("employee_id", employeeId).order("effective_date", { ascending: false })
         : Promise.resolve({ data: [] }),
+      supabase.from("employees").select(TRANSFERRED_TO_SELECT).eq("transferred_from_id", employeeId).maybeSingle(),
     ]);
-    const err = e.error || h.error || t.error;
+    const err = e.error || h.error || t.error || to.error;
     if (err) setError(err.message);
     else if (!e.data) setError("This employee could not be found, or is not in your scope.");
     else {
@@ -45,6 +53,7 @@ export function useEmployeeProfile(employeeId) {
       setEmployee(e.data);
       setHistory(h.data ?? []);
       setTechRates(t.data ?? []);
+      setTransferredTo(to.data ?? null);
     }
     setLoading(false);
   }, [employeeId, privileged]);
@@ -85,6 +94,23 @@ export function useEmployeeProfile(employeeId) {
     return { error: e };
   }, [employeeId, load]);
 
+  // Migration 76: ends this row and starts a linked one at the new store,
+  // all in one database call. `rates` (admin/master only) holds just the
+  // rates being changed; anything left out carries over. Returns the new
+  // row's id so the panel can open it.
+  const transfer = useCallback(async ({ toLocationId, transferDate, position, isStoreManager, rates }) => {
+    const { data, error: e } = await supabase.rpc("transfer_employee", {
+      p_employee_id: employeeId,
+      p_to_location_id: toLocationId,
+      p_transfer_date: transferDate,
+      p_position: position || null,
+      p_is_store_manager: !!isStoreManager,
+      p_rates: rates && Object.keys(rates).length ? rates : null,
+    });
+    if (!e) await load();
+    return { id: data ?? null, error: e };
+  }, [employeeId, load]);
+
   // One change on one date. Re-saving the same type + date replaces the
   // amount rather than stacking a second row (it is the primary key).
   const saveRate = useCallback(async (rateType, effectiveDate, amount) => {
@@ -112,5 +138,5 @@ export function useEmployeeProfile(employeeId) {
     return { error: out };
   }, [employeeId, load]);
 
-  return { employee, history, techRates, privileged, loading, error, reload: load, saveDetails, endEmployment, reactivate, saveRate, removeRate };
+  return { employee, history, techRates, transferredTo, privileged, loading, error, reload: load, saveDetails, endEmployment, reactivate, transfer, saveRate, removeRate };
 }

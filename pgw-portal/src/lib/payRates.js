@@ -4,7 +4,7 @@
 // agree:
 //
 //   ratesOn()        <->  public._pay_rate_at(employee, date)
-//   employedDuring() <->  public._employed_during(active, hire, term, from, to)
+//   employedDuring() <->  public._employed_during(active, greatest(hire, transfer), term, from, to)
 //
 // THE RATE RULE: a pay week is paid, per rate type, at the row with the
 // latest effective_date ON OR BEFORE THE WEEK'S START. Callers pass the
@@ -55,9 +55,12 @@ export function rowOn(history, type, date) {
 
 // Employed at any point in [from, to]? With no termination date the
 // active flag decides, so a legacy "Remove" (active = false, no date)
-// still hides someone from weeks where they have no data.
+// still hides someone from weeks where they have no data. A row that
+// arrived by transfer (migration 76) starts on its transfer_date, not
+// the original hire date it carries.
 export function employedDuring(emp, from, to) {
-  if (emp.hire_date && emp.hire_date > to) return false;
+  const start = emp.transfer_date && (!emp.hire_date || emp.transfer_date > emp.hire_date) ? emp.transfer_date : emp.hire_date;
+  if (start && start > to) return false;
   if (emp.termination_date) return emp.termination_date >= from;
   return !!emp.active;
 }

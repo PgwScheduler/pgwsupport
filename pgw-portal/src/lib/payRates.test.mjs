@@ -42,6 +42,8 @@ eq("hired mid-week", employedDuring({ active: true, hire_date: "2026-09-10" }, .
 eq("hired after the week", employedDuring({ active: true, hire_date: "2026-09-13" }, ...wk), false);
 eq("ended mid-week", employedDuring({ active: false, termination_date: "2026-09-08" }, ...wk), true);
 eq("ended before the week", employedDuring({ active: false, termination_date: "2026-09-05" }, ...wk), false);
+eq("transferred in after the week (original hire long before)", employedDuring({ active: true, hire_date: "2020-01-01", transfer_date: "2026-09-13" }, ...wk), false);
+eq("transferred in mid-week", employedDuring({ active: true, hire_date: "2020-01-01", transfer_date: "2026-09-10" }, ...wk), true);
 eq("termination date wins over the active flag", employedDuring({ active: true, termination_date: "2026-09-05" }, ...wk), false);
 
 // --- which week a change first applies to -------------------------------
