@@ -123,7 +123,7 @@ export function TechRanksView() {
           <span>
             <strong>{report.storesWithData} of {report.storeCount} Midas stores</strong> have tech hours for {period?.long}.
             {report.storesWithData < report.storeCount && " Stores without any are marked with a grey dot under their division."}
-            {" "}Ranked by hours turned; a tie goes to the higher proficiency. A tech who worked at more than one store is ranked once, under the store where they worked the most hours.
+            {" "}Ranked by hours turned; a tie goes to the higher proficiency. Managers are not ranked. A tech who worked at more than one store is ranked once, under the store where they worked the most hours.
           </span>
         </p>
       )}
