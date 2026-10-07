@@ -33,7 +33,9 @@ import { CURRENCY_FMT, HOURS_FMT, PERCENT_FMT, QTY_FMT } from "./excelFormats.js
 // ---------------------------------------------------------------------
 export const STORE_USERS_MAY_BUILD_REPORTS = false;
 
-export const REPORT_ROLES = ["district", "regional", "admin", "master"];
+// "office" (migration 78): read-only, every store. report_build() still
+// refuses it the pay-breakdown measures, as for everyone below admin.
+export const REPORT_ROLES = ["district", "regional", "office", "admin", "master"];
 
 export const canBuildReports = (role) =>
   REPORT_ROLES.includes(role) || (STORE_USERS_MAY_BUILD_REPORTS && role === "store");

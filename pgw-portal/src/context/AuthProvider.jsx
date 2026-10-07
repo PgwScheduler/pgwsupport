@@ -64,7 +64,7 @@ export function AuthProvider({ children }) {
         // Never auto-select a sandbox store — see isSandbox above. Fall
         // back to the full list only if every store is a sandbox, which
         // would mean there is nothing real to land on anyway. The Home
-        // Office (migration 68) is skipped too: office roles land on a
+        // Office (migration 68) is skipped too: admin and master land on a
         // store and pick the Home Office deliberately.
         const real = storeRows.filter((s) => !isSandbox(s) && !s.is_home_office);
         return (real[0] ?? storeRows[0])?.id ?? null;

@@ -18,7 +18,7 @@ const blankForm = { employee_id: "", start_time: "09:00", end_time: "17:00", not
 // Day detail: lists the day's shifts with edit/delete, plus an add/edit form.
 // Validates end > start in the UI (the db check enforces it too) and warns —
 // without blocking — on an overlap with the same employee's other shifts.
-export function DayDetailModal({ store, date, roster, shifts, celebrations = [], shiftTypes = [], typesById = {}, onClose, addShift, updateShift, deleteShift }) {
+export function DayDetailModal({ store, date, roster, shifts, celebrations = [], shiftTypes = [], typesById = {}, onClose, addShift, updateShift, deleteShift, readOnly = false }) {
   const [form, setForm] = useState(blankForm);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState(null);
@@ -153,7 +153,7 @@ export function DayDetailModal({ store, date, roster, shifts, celebrations = [],
                     {s.notes ? ` · ${s.notes}` : ""}
                   </p>
                 </div>
-                <div className="flex items-center gap-1">
+                {!readOnly && <div className="flex items-center gap-1">
                   <button
                     onClick={() => startEdit(s)}
                     className="rounded p-1.5 text-content-secondary hover:bg-surface-overlay hover:text-content-primary"
@@ -169,12 +169,14 @@ export function DayDetailModal({ store, date, roster, shifts, celebrations = [],
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
-                </div>
+                </div>}
               </div>
             ))
           )}
         </div>
 
+        {/* Office (migration 78) reads the schedule; it never changes it. */}
+        {!readOnly && (
         <form onSubmit={submit} className="space-y-3 border-t border-hairline pt-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-content-secondary">
             {editingId ? "Edit shift" : "Add shift"}
@@ -247,6 +249,7 @@ export function DayDetailModal({ store, date, roster, shifts, celebrations = [],
             )}
           </div>
         </form>
+        )}
       </Card>
     </div>
   );

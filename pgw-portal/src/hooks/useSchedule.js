@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { monthGrid } from "../lib/scheduleMath.js";
+import { isOfficeRole } from "../lib/officeRole.js";
 
 // Loads one store's shifts for the visible month grid plus the store's active
 // roster, and exposes add/update/delete. Reads only id + full_name off the
@@ -9,6 +10,8 @@ import { monthGrid } from "../lib/scheduleMath.js";
 // scoping; we never filter by role or hardcode a store list here.
 const SHIFT_SELECT =
   "id, location_id, employee_id, shift_date, start_time, end_time, notes, shift_type_id, employee:employee_id ( id, full_name )";
+// No embed: it would join employees, which the office role cannot read.
+const OFFICE_SHIFT_SELECT = "id, location_id, employee_id, shift_date, start_time, end_time, notes, shift_type_id";
 
 export function useSchedule(store, year, month) {
   const { user, role } = useAuth();
@@ -18,6 +21,8 @@ export function useSchedule(store, year, month) {
   // Fill-empty duplication) stays open to anyone can_access_location lets
   // in, which is the district/regional edit right migration 17 established.
   const canReplace = role === "admin" || role === "master";
+  // Office (migration 78): read-only, and names come from schedule_people().
+  const office = isOfficeRole(role);
 
   const [shifts, setShifts] = useState([]);
   const [roster, setRoster] = useState([]);
@@ -36,19 +41,24 @@ export function useSchedule(store, year, month) {
     const [shiftRes, rosterRes, typeRes] = await Promise.all([
       supabase
         .from("employee_schedules")
-        .select(SHIFT_SELECT)
+        .select(office ? OFFICE_SHIFT_SELECT : SHIFT_SELECT)
         .eq("location_id", locationId)
         .gte("shift_date", rangeStart)
         .lte("shift_date", rangeEnd)
         .order("shift_date")
         .order("start_time"),
-      supabase
-        .from("employees")
-        // Birthday + anniversary fields feed the calendar (migration 67).
-        .select("id, full_name, birth_month, birth_day, hire_date, rehire_date")
-        .eq("location_id", locationId)
-        .eq("active", true)
-        .order("full_name"),
+      office
+        // An office login cannot read employees (migration 78); this
+        // returns just the calendar's columns, active people plus anyone
+        // holding a shift in the range.
+        ? supabase.rpc("schedule_people", { p_location_id: locationId, p_from: rangeStart, p_to: rangeEnd })
+        : supabase
+          .from("employees")
+          // Birthday + anniversary fields feed the calendar (migration 67).
+          .select("id, full_name, birth_month, birth_day, hire_date, rehire_date")
+          .eq("location_id", locationId)
+          .eq("active", true)
+          .order("full_name"),
       // Company-wide catalog: readable by everyone, so no location filter.
       supabase
         .from("shift_types")
@@ -56,12 +66,17 @@ export function useSchedule(store, year, month) {
         .eq("active", true)
         .order("sort_order"),
     ]);
+    const people = rosterRes.error ? [] : rosterRes.data ?? [];
     if (shiftRes.error) setError(shiftRes.error.message);
-    else setShifts(shiftRes.data ?? []);
-    if (!rosterRes.error) setRoster(rosterRes.data ?? []);
+    else if (office) {
+      // The embedded employee comes from schedule_people() instead.
+      const byId = Object.fromEntries(people.map((p) => [p.id, { id: p.id, full_name: p.full_name }]));
+      setShifts((shiftRes.data ?? []).map((s) => ({ ...s, employee: byId[s.employee_id] ?? null })));
+    } else setShifts(shiftRes.data ?? []);
+    if (!rosterRes.error) setRoster(office ? people.filter((p) => p.active) : people);
     if (!typeRes.error) setShiftTypes(typeRes.data ?? []);
     setLoading(false);
-  }, [locationId, rangeStart, rangeEnd]);
+  }, [locationId, rangeStart, rangeEnd, office]);
 
   useEffect(() => {
     load();
@@ -165,7 +180,7 @@ export function useSchedule(store, year, month) {
   return {
     grid, byDate, roster, loading, error, reload: load,
     addShift, updateShift, deleteShift,
-    shiftTypes, typesById, canReplace,
+    shiftTypes, typesById, canReplace, readOnly: office,
     previewCopy, commitCopy,
   };
 }

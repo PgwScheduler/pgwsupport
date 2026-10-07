@@ -15,6 +15,8 @@ import { BonusView } from "./components/BonusView.jsx";
 import { ReportsView } from "./components/reports/ReportsView.jsx";
 import { canBuildReports } from "./lib/reportSpec.js";
 import { viewAllowed, HOME_OFFICE_DEFAULT_VIEW } from "./lib/homeOffice.js";
+import { isOfficeRole, roleViewAllowed, OFFICE_DEFAULT_VIEW } from "./lib/officeRole.js";
+import { OfficeDashboard } from "./components/dashboard/OfficeDashboard.jsx";
 import { DocumentsView } from "./components/DocumentsView.jsx";
 import { TrainingView } from "./components/TrainingView.jsx";
 import { UsersView } from "./components/users/UsersView.jsx";
@@ -86,11 +88,16 @@ export default function App() {
 
   // A screen hidden for the Home Office (migration 68) falls back to
   // Payroll while it is selected; the choice comes back on a real store.
-  const view = viewAllowed(chosenView, currentStore) ? chosenView : HOME_OFFICE_DEFAULT_VIEW;
+  // An office login (migration 78) falls back to its own Dashboard -- it
+  // never sees the Home Office, so the two never meet.
+  const view = !roleViewAllowed(chosenView, profile.role) ? OFFICE_DEFAULT_VIEW
+    : viewAllowed(chosenView, currentStore) ? chosenView : HOME_OFFICE_DEFAULT_VIEW;
 
   return (
     <Shell view={view} setView={setView}>
-      {view === "dashboard" && <DashboardView key={"dashboard-" + currentStore.id} store={currentStore} onNavigate={setView} />}
+      {view === "dashboard" && (isOfficeRole(profile.role)
+        ? <OfficeDashboard onNavigate={setView} />
+        : <DashboardView key={"dashboard-" + currentStore.id} store={currentStore} onNavigate={setView} />)}
       {view === "hours" && <HoursView key={"hours-" + currentStore.id} store={currentStore} onNavigate={setView} />}
       {view === "schedule" && <ScheduleView key={"schedule-" + currentStore.id} store={currentStore} />}
       {view === "drawer" && <DrawerView key={"drawer-" + currentStore.id} store={currentStore} />}

@@ -264,7 +264,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
       {privileged && summary && (
         <p className="mb-3 text-xs text-content-muted">
           Payroll dollars: <span className="font-semibold text-content-secondary">{money(summary.payrollDollars || 0)}</span>{" "}
-          — visible to office roles only.
+          — visible to admin and master only.
         </p>
       )}
 

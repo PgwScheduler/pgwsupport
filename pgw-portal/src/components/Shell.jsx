@@ -6,6 +6,7 @@ import {
 import { useAuth } from "../context/AuthProvider.jsx";
 import { canBuildReports } from "../lib/reportSpec.js";
 import { viewAllowed, revenueStores } from "../lib/homeOffice.js";
+import { roleViewAllowed } from "../lib/officeRole.js";
 import { LogoMark, T } from "./ui.jsx";
 import { StorePicker } from "./StorePicker.jsx";
 import { ChangePasswordModal } from "./ChangePasswordModal.jsx";
@@ -36,6 +37,7 @@ export const ROLE_LABELS = {
   store: "Store Manager",
   district: "District Manager",
   regional: "Regional Manager",
+  office: "Office (read-only)",
   admin: "Admin",
   master: "Master",
 };
@@ -48,6 +50,8 @@ function scopeLabel(profile, storeCount) {
       return profile.district?.name ?? "Your district";
     case "regional":
       return profile.region?.name ?? "Your region";
+    case "office":
+      return `All ${storeCount} stores · read-only`;
     case "admin":
       return `All ${storeCount} stores`;
     case "master":
@@ -61,12 +65,13 @@ export function Shell({ view, setView, children }) {
   const { profile, role, stores, currentStore, selectedStoreId, setSelectedStoreId, signOut } = useAuth();
   const [showChangePassword, setShowChangePassword] = useState(false);
   // The Home Office has no sales, cash or technicians (migration 68), so
-  // those screens drop out of the menu while it is selected.
+  // those screens drop out of the menu while it is selected. An office
+  // login (migration 78) sees only its read-only screens.
   const navItems = [
     ...NAV,
     ...(canBuildReports(role) ? REPORT_NAV : []),
     ...(role === "master" ? MASTER_NAV : []),
-  ].filter((n) => viewAllowed(n.key, currentStore));
+  ].filter((n) => viewAllowed(n.key, currentStore) && roleViewAllowed(n.key, role));
   const storeCount = revenueStores(stores).length;
 
   return (

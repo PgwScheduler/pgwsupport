@@ -5,7 +5,7 @@ import { useUserManagement } from "../../hooks/useUserManagement.js";
 import { ROLE_LABELS } from "../Shell.jsx";
 import { Card, Field, GhostBtn, PrimaryBtn, SectionHeader, inputCls } from "../ui.jsx";
 
-const ROLE_OPTIONS = ["store", "district", "regional", "admin", "master"];
+const ROLE_OPTIONS = ["store", "district", "regional", "office", "admin", "master"];
 
 function scopeIdOf(user) {
   return user.location_id || user.district_id || user.region_id || "";
@@ -41,6 +41,9 @@ function ScopeSelect({ role, value, onChange, regions, districts, stores }) {
         ))}
       </select>
     );
+  }
+  if (role === "office") {
+    return <span className="text-sm text-content-muted">All stores · read-only, no payroll</span>;
   }
   return <span className="text-sm text-content-muted">All 36 stores</span>;
 }
