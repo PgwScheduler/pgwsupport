@@ -21,7 +21,7 @@ export function ScheduleView({ store }) {
 
   const {
     grid, byDate, roster, loading, error, addShift, updateShift, deleteShift,
-    shiftTypes, typesById, canReplace, previewCopy, commitCopy,
+    shiftTypes, typesById, canReplace, readOnly, previewCopy, commitCopy,
   } = useSchedule(store, year, month);
 
   const celebrations = useMemo(() => celebrationsByDate(roster, grid.flat()), [roster, grid]);
@@ -81,9 +81,9 @@ export function ScheduleView({ store }) {
             <GhostBtn onClick={() => shiftMonth(1)} aria-label="Next month">
               <ChevronRight className="h-4 w-4" />
             </GhostBtn>
-            <GhostBtn onClick={() => setDupOpen(true)}>
+            {!readOnly && <GhostBtn onClick={() => setDupOpen(true)}>
               <Copy className="mr-1 inline h-3.5 w-3.5" />Duplicate month
-            </GhostBtn>
+            </GhostBtn>}
             <GhostBtn onClick={onExport}>
               <Download className="mr-1 inline h-3.5 w-3.5" />Excel
             </GhostBtn>
@@ -254,6 +254,7 @@ export function ScheduleView({ store }) {
           addShift={addShift}
           updateShift={updateShift}
           deleteShift={deleteShift}
+          readOnly={readOnly}
         />
       )}
 

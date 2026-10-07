@@ -4,6 +4,7 @@ import { useMonthlyTicSheet } from "../hooks/useMonthlyTicSheet.js";
 import { useMonthlyGoals } from "../hooks/useMonthlyGoals.js";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { useHorizonUpload } from "../hooks/useHorizonUpload.js";
+import { isOfficeRole } from "../lib/officeRole.js";
 import { HorizonSendModal, LastUploadLine, ResendBanner } from "./HorizonSendModal.jsx";
 import { SectionHeader, Card, PrimaryBtn, GhostBtn, Empty, inputCls, T } from "./ui.jsx";
 import { money, moneyCell, pct, numOrDash } from "../lib/format.js";
@@ -139,9 +140,12 @@ function GoalsStrip({ goals, year, month }) {
 }
 
 // ---- per-day sales breakdown panel ----------------------------------------
-function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments, onSave, onClose }) {
+function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments: canAdjust, readOnly, onSave, onClose }) {
+  // Office (migration 78): every field locked, nothing to save.
+  const canEditAdjustments = canAdjust && !readOnly;
   // Locked fields show their stored value and are never sent on save.
-  const isLocked = (f) => f.computed || (f.restricted && !canEditAdjustments);
+  const isLocked = (f) => readOnly || f.computed || (f.restricted && !canEditAdjustments);
+  const lockTip = (f) => (f.computed || readOnly ? undefined : ADJUSTMENTS_LOCKED_TIP);
   const [vals, setVals] = useState(() => {
     const o = {};
     for (const f of BREAKDOWN_FIELDS) if (!f.computed) o[f.key] = numToStr(row?.[f.key]);
@@ -206,9 +210,9 @@ function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments, onSave
               </span>
               {isLocked(f) ? (
                 <div className={inputCls + " flex items-center justify-between bg-surface-page text-content-muted"}
-                  title={f.computed ? undefined : ADJUSTMENTS_LOCKED_TIP}>
+                  title={lockTip(f)}>
                   <span>{money(f.computed ? labor : num(row?.[f.key]))}</span>
-                  <Lock className="h-3.5 w-3.5" aria-label={f.computed ? "Read-only" : ADJUSTMENTS_LOCKED_TIP} />
+                  <Lock className="h-3.5 w-3.5" aria-label={lockTip(f) ?? "Read-only"} />
                 </div>
               ) : (
                 <input type="number" inputMode="decimal" step="0.01"
@@ -233,9 +237,9 @@ function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments, onSave
               onChange={(e) => { setNote(e.target.value); setNoteError(null); }} />
           ) : (
             <div className={inputCls + " flex items-start justify-between gap-2 bg-surface-page text-content-muted"}
-              title={ADJUSTMENTS_LOCKED_TIP}>
+              title={readOnly ? undefined : ADJUSTMENTS_LOCKED_TIP}>
               <span className="whitespace-pre-wrap">{storedNote || (storedAdj !== 0 ? "No reason recorded" : "—")}</span>
-              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-label={ADJUSTMENTS_LOCKED_TIP} />
+              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-label={readOnly ? "Read-only" : ADJUSTMENTS_LOCKED_TIP} />
             </div>
           )}
           {noteError && reasonMissing && <span className="mt-1 block text-xs text-danger">{noteError}</span>}
@@ -255,8 +259,8 @@ function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments, onSave
         </p>
         {saveError && <p className="mt-3 text-sm text-danger">{saveError}</p>}
         <div className="mt-5 flex justify-end gap-2">
-          <GhostBtn onClick={onClose} disabled={busy}>Cancel</GhostBtn>
-          <PrimaryBtn onClick={save} disabled={busy}>Save</PrimaryBtn>
+          <GhostBtn onClick={onClose} disabled={busy}>{readOnly ? "Close" : "Cancel"}</GhostBtn>
+          {!readOnly && <PrimaryBtn onClick={save} disabled={busy}>Save</PrimaryBtn>}
         </div>
       </Card>
     </div>
@@ -268,6 +272,7 @@ export function TicSheetView({ store }) {
   const { role } = useAuth();
   const canEditGoals = PRIVILEGED.includes(role);
   const canEditAdjustments = ADJUSTMENT_EDITORS.includes(role);
+  const readOnly = isOfficeRole(role);
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1-based
 
@@ -451,7 +456,9 @@ export function TicSheetView({ store }) {
       ) : (
         <Card className="overflow-hidden p-0">
           <div className="text-xs text-content-muted px-3 py-2 border-b border-hairline">
-            Enter units per category per day. Tab moves across a day, Enter moves down a column. Changes save automatically. Scroll sideways for all columns.
+            {readOnly
+              ? "Read-only. Click a day's Sales to see its breakdown. Scroll sideways for all columns."
+              : "Enter units per category per day. Tab moves across a day, Enter moves down a column. Changes save automatically. Scroll sideways for all columns."}
           </div>
           <div ref={gridRef} className="overflow-auto" style={{ maxHeight: "72vh" }} key={`${store.id}-${year}-${month}`}>
             <table className="border-separate border-spacing-0 text-xs">
@@ -588,6 +595,9 @@ export function TicSheetView({ store }) {
                       const row = kpiByDate[iso];
                       const r = dayRowIndex++;
                       const muted = !day.editable;
+                      // An office login (migration 78) reads every day; it types into none.
+                      const locked = muted || readOnly;
+                      const shownCls = muted ? "text-content-muted" : "text-content-primary";
                       const dayBg = muted ? "bg-surface-page" : "bg-surface-card";
                       const sales = daySales(row, laborSalesByDate[iso]);
                       const potential = dayPotential(row, laborSalesByDate[iso]);
@@ -611,8 +621,8 @@ export function TicSheetView({ store }) {
 
                           {categories.map((c) => (
                             <td key={c.id} className={`${td} ${muted ? "bg-surface-page" : ""} p-0`}>
-                              {muted ? (
-                                <div className="h-7 text-center leading-7 text-content-muted">{numToStr(unitsByDate[iso]?.[c.id])}</div>
+                              {locked ? (
+                                <div className={"h-7 text-center leading-7 " + shownCls}>{numToStr(unitsByDate[iso]?.[c.id])}</div>
                               ) : (
                                 <input type="number" inputMode="numeric" min="0"
                                   data-r={r} data-c={`u${c.id}`} className={cellInput}
@@ -627,8 +637,8 @@ export function TicSheetView({ store }) {
                             if (s.type === "edit") {
                               return (
                                 <td key={s.key} className={`${td} ${muted ? "bg-surface-page" : ""} p-0`}>
-                                  {muted ? (
-                                    <div className="h-7 text-center leading-7 text-content-muted">{numToStr(row?.[s.key])}</div>
+                                  {locked ? (
+                                    <div className={"h-7 text-center leading-7 " + shownCls}>{numToStr(row?.[s.key])}</div>
                                   ) : (
                                     <input type="number" inputMode={s.kind === "int" ? "numeric" : "decimal"}
                                       step={s.kind === "int" ? "1" : "0.01"} min="0"
@@ -722,6 +732,7 @@ export function TicSheetView({ store }) {
           row={kpiByDate[detailDate]}
           laborSales={laborSalesByDate[detailDate]}
           canEditAdjustments={canEditAdjustments}
+          readOnly={readOnly}
           onSave={async (patch) => {
             const res = await saveSummary(detailDate, patch);
             if (!res.error) { scheduleGoals(); horizon.reloadResend(); }

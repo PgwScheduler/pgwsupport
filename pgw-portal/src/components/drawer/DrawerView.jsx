@@ -9,6 +9,7 @@ import { Card, Empty, Field, GhostBtn, PrimaryBtn, SectionHeader, T, inputCls } 
 import { Calc, CountGrid, Entry, MiniTable } from "./shared.jsx";
 import { CloseoutDetail } from "./CloseoutDetail.jsx";
 import { ExportRangeModal } from "../ExportRangeModal.jsx";
+import { isOfficeRole } from "../../lib/officeRole.js";
 
 export function DrawerView({ store }) {
   const { role, stores } = useAuth();
@@ -20,6 +21,7 @@ export function DrawerView({ store }) {
   const [rangeOpen, setRangeOpen] = useState(false);
   const float = store.drawer_float;
   const canDelete = role === "master";
+  const readOnly = isOfficeRole(role);
   const canExportRange = (stores?.length ?? 0) > 1;
 
   const set = (k) => (v) => setD((p) => ({ ...p, [k]: v }));
@@ -61,7 +63,7 @@ export function DrawerView({ store }) {
       <SectionHeader
         title="Cash Drawer Closeout"
         subtitle={`#${store.store_number} · ${store.name}`}
-        action={
+        action={readOnly ? null : (
           <div className="flex items-center gap-2">
             {editingId && (
               <GhostBtn onClick={cancelEdit}><X className="h-4 w-4" /> Cancel edit</GhostBtn>
@@ -72,13 +74,15 @@ export function DrawerView({ store }) {
               {saving ? "Saving…" : editingId ? "Update closeout" : "Save closeout"}
             </PrimaryBtn>
           </div>
-        }
+        )}
       />
 
       {error && (
         <p className="rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>
       )}
 
+      {/* An office login (migration 78) reads closeouts; it never enters one. */}
+      {!readOnly && (<>
       {editingId && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-warning-border bg-warning-tint px-4 py-2.5 text-sm text-warning">
           <span className="flex items-center gap-2">
@@ -203,6 +207,7 @@ export function DrawerView({ store }) {
           All purchases go through Shari before using anything from the cash drawer. Anything needing further approval, she takes to John or Gus.
         </p>
       </div>
+      </>)}
 
       <div>
         <div className="mb-2 flex items-center justify-between">
@@ -219,7 +224,8 @@ export function DrawerView({ store }) {
         {loading ? (
           <p className="px-1 py-6 text-center text-sm text-content-muted">Loading…</p>
         ) : saved.length === 0 ? (
-          <Empty icon={Banknote} title="No closeouts saved yet" hint="Fill out the sheet above and hit Save closeout." />
+          <Empty icon={Banknote} title="No closeouts saved yet"
+            hint={readOnly ? "This store hasn't saved a closeout yet." : "Fill out the sheet above and hit Save closeout."} />
         ) : (
           <Card className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -243,12 +249,14 @@ export function DrawerView({ store }) {
                       <td className="px-4 py-2.5 text-content-secondary">{money(rt.homeOffice)}</td>
                       <td className="px-4 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-3">
-                          <button
-                            onClick={(ev) => { ev.stopPropagation(); startEdit(r); }}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-content-secondary hover:text-content-primary"
-                          >
-                            <Pencil className="h-3.5 w-3.5" /> Edit
-                          </button>
+                          {!readOnly && (
+                            <button
+                              onClick={(ev) => { ev.stopPropagation(); startEdit(r); }}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-content-secondary hover:text-content-primary"
+                            >
+                              <Pencil className="h-3.5 w-3.5" /> Edit
+                            </button>
+                          )}
                           <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: T.accentSoftText }}>
                             <Eye className="h-3.5 w-3.5" /> View sheet
                           </span>
@@ -270,7 +278,7 @@ export function DrawerView({ store }) {
         )}
       </div>
 
-      {viewing && <CloseoutDetail record={viewing} store={store} onClose={() => setViewing(null)} onEdit={() => startEdit(viewing)} />}
+      {viewing && <CloseoutDetail record={viewing} store={store} onClose={() => setViewing(null)} onEdit={readOnly ? undefined : () => startEdit(viewing)} />}
       {rangeOpen && <ExportRangeModal storeCount={stores.length} onClose={() => setRangeOpen(false)} />}
     </div>
   );
