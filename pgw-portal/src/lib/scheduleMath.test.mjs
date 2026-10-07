@@ -37,5 +37,16 @@ const nye = [{ id: "n", full_name: "New Year", birth_month: 1, birth_day: 2, hir
 eq("a grid spanning two years uses each day's own year", celebrationsByDate(nye, dec)["2027-01-02"].map((x) => x.years ?? x.kind), ["birthday", 7]);
 eq("empty roster", celebrationsByDate([], sept), {});
 
+// The all-stores list (migration 79) carries a store; a store roster does not.
+const company = [
+  { id: "x", full_name: "Xia Store", birth_month: 9, birth_day: 24, hire_date: null, rehire_date: null, store_number: "3303", store_name: "Midas Millwood Ave" },
+  { id: "y", full_name: "Yan Office", birth_month: null, birth_day: null, hire_date: "2020-09-24", rehire_date: null, store_number: "1515", store_name: "Home Office" },
+];
+eq("company list: each line carries its store", celebrationsByDate(company, sept)["2026-09-24"], [
+  { kind: "birthday", id: "x", name: "Xia Store", store: { number: "3303", name: "Midas Millwood Ave" } },
+  { kind: "anniversary", id: "y", name: "Yan Office", years: 6, store: { number: "1515", name: "Home Office" } },
+]);
+eq("a store roster stays store-less", Object.keys(c["2026-09-24"][0]), ["kind", "id", "name"]);
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

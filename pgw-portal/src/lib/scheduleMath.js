@@ -132,7 +132,11 @@ export function celebrationsByDate(roster, dates) {
   if (!dates.length) return out;
   const want = new Set(dates);
   const years = [...new Set(dates.map((x) => Number(x.slice(0, 4))))];
-  const add = (date, item) => (out[date] ??= []).push(item);
+  // A company-wide list (migration 79) carries each person's store, so
+  // the calendar can say where they work; a store's own roster does not.
+  const storeOf = {};
+  for (const e of roster ?? []) if (e.store_number) storeOf[e.id] = { number: e.store_number, name: e.store_name };
+  const add = (date, item) => (out[date] ??= []).push(storeOf[item.id] ? { ...item, store: storeOf[item.id] } : item);
   for (const e of roster ?? []) {
     if (e.birth_month && e.birth_day) {
       for (const y of years) {
