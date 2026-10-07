@@ -7,9 +7,15 @@ import { CelebrationLine } from "./Celebrations.jsx";
 import { shiftColorVar } from "../../lib/shiftTypes.js";
 import { DayDetailModal } from "./DayDetailModal.jsx";
 import { DuplicateMonthModal } from "./DuplicateMonthModal.jsx";
+import { useAuth } from "../../context/AuthProvider.jsx";
+import { useCompanyCelebrations } from "../../hooks/useCompanyCelebrations.js";
+import { isHomeOffice } from "../../lib/homeOffice.js";
+import { isOfficeRole } from "../../lib/officeRole.js";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAX_VISIBLE = 3; // shifts shown per day cell before "+N more"
+const ALL_CELEBRATIONS_KEY = "pgw.schedule.allCelebrations";
+const MAX_CELEBRATIONS_ALL = 4; // all-stores view: lines per day cell before "+N more"
 
 export function ScheduleView({ store }) {
   const now = new Date();
@@ -24,7 +30,26 @@ export function ScheduleView({ store }) {
     shiftTypes, typesById, canReplace, readOnly, previewCopy, commitCopy,
   } = useSchedule(store, year, month);
 
-  const celebrations = useMemo(() => celebrationsByDate(roster, grid.flat()), [roster, grid]);
+  // Everyone's birthdays and anniversaries (migration 79): on #1515's
+  // schedule, and on any schedule for an office login (which never sees
+  // #1515). Stores only ever see their own. The choice is remembered.
+  const { role } = useAuth();
+  const canSeeAll = isHomeOffice(store) || isOfficeRole(role);
+  const [allPref, setAllPref] = useState(() => {
+    try { return localStorage.getItem(ALL_CELEBRATIONS_KEY) === "1"; } catch { return false; }
+  });
+  const showAll = canSeeAll && allPref;
+  const toggleAll = () => {
+    setAllPref((v) => {
+      try { localStorage.setItem(ALL_CELEBRATIONS_KEY, v ? "0" : "1"); } catch { /* per-viewer nicety only */ }
+      return !v;
+    });
+  };
+  const company = useCompanyCelebrations(showAll);
+  const celebrations = useMemo(
+    () => celebrationsByDate(showAll ? company.people : roster, grid.flat()),
+    [showAll, company.people, roster, grid]
+  );
 
   const monthInputValue =`${year}-${String(month + 1).padStart(2, "0")}`;
   const today = todayStr();
@@ -93,6 +118,20 @@ export function ScheduleView({ store }) {
 
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
+      {canSeeAll && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-hairline bg-surface-card px-3 py-2 text-sm">
+          <label className="flex cursor-pointer items-center gap-2 font-medium text-content-primary">
+            <input type="checkbox" checked={allPref} onChange={toggleAll} className="h-4 w-4" style={{ accentColor: T.accent }} />
+            Show every store's birthdays &amp; anniversaries
+          </label>
+          <span className="text-xs text-content-muted">
+            {showAll
+              ? company.loading ? "Loading…" : company.error ? company.error : `${company.people.length} people across all stores · store number shown on each`
+              : `Showing #${store.store_number}'s people only`}
+          </span>
+        </div>
+      )}
+
       {/* Legend — colour is never the only signal, so the abbreviation that
           appears on each shift block can always be resolved here. */}
       {shiftTypes.length > 0 && (
@@ -152,9 +191,16 @@ export function ScheduleView({ store }) {
                         </span>
                       </div>
                       <div className="space-y-0.5">
-                        {(celebrations[date] ?? []).map((c) => (
+                        {/* All stores can put a dozen on one day; the cell shows
+                            a few and the day's detail lists them all. */}
+                        {(celebrations[date] ?? []).slice(0, showAll ? MAX_CELEBRATIONS_ALL : undefined).map((c) => (
                           <CelebrationLine key={c.kind + c.id} c={c} compact />
                         ))}
+                        {showAll && (celebrations[date]?.length ?? 0) > MAX_CELEBRATIONS_ALL && (
+                          <div className="px-1 text-[11px] font-medium" style={{ color: T.accentSoftText }}>
+                            +{celebrations[date].length - MAX_CELEBRATIONS_ALL} more
+                          </div>
+                        )}
                         {dayShifts.slice(0, MAX_VISIBLE).map((s) => {
                           // An untyped shift renders exactly as it always has:
                           // no colour bar, no abbreviation, same markup.
