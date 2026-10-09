@@ -6,8 +6,9 @@ import { thisWeekStart, weekLabel, weeksInRange, daysForWeek } from "../lib/week
 import { useDateRange } from "../context/DateRangeProvider.jsx";
 import { DateRangeControl } from "./DateRangeControl.jsx";
 import {
-  computeStoreRow, computePayRow, computePayrollSummary, TARGETS, positionsForBrand, canBeSalaried,
+  computeStoreRow, computePayRow, computePayrollSummary, TARGETS, positionsForBrand, canBeSalaried, canChangePosition,
 } from "../lib/payrollMath.js";
+import { useAuth } from "../context/AuthProvider.jsx";
 import { isHomeOffice } from "../lib/homeOffice.js";
 import { money, pct, numOrDash } from "../lib/format.js";
 import { exportPayrollCSV, printPayroll } from "../lib/payrollExport.js";
@@ -66,6 +67,7 @@ function Th({ children, className = "" }) {
 }
 
 function MidasHoursView({ store, cutover, onNavigate }) {
+  const { role } = useAuth();
   // The shared range decides WHICH weeks are available; the grid still
   // renders one WHOLE week at a time. That is what keeps overtime a
   // whole-week figure here — the displayed slice is never a fragment of
@@ -338,6 +340,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
                     <select
                       className="rounded border border-transparent bg-transparent py-1 text-sm text-content-primary outline-none focus:border-hairline-strong focus:bg-surface-overlay"
                       value={r.employee.position ?? ""}
+                      disabled={!canChangePosition(role)}
                       onChange={(e) => updateEmployee(empId, { position: e.target.value })}
                     >
                       {/* Migration 73: no position until one is confirmed. */}

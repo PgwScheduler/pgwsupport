@@ -6,8 +6,9 @@ import { useDateRange } from "../context/DateRangeProvider.jsx";
 import { DateRangeControl } from "./DateRangeControl.jsx";
 import {
   computeSpeedeeStoreRow, computeSpeedeeRefRow, computeSpeedeeSummary,
-  SPEEDEE_POSITIONS, SPEEDEE_TARGET, num,
+  SPEEDEE_POSITIONS, SPEEDEE_TARGET, num, canChangePosition,
 } from "../lib/payrollMath.js";
+import { useAuth } from "../context/AuthProvider.jsx";
 import { money, pct, numOrDash } from "../lib/format.js";
 import { exportSpeedeeCSV, printSpeedee } from "../lib/payrollExport.js";
 import { Card, GhostBtn, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
@@ -37,6 +38,7 @@ function Th({ children, className = "" }) {
 }
 
 export function SpeedeeHoursView({ store, cutover }) {
+  const { role } = useAuth();
   // Same rule as the Midas grid: the shared range chooses which weeks are
   // available, and the grid always renders one WHOLE week, so overtime is
   // never computed over a fragment of the range.
@@ -261,6 +263,7 @@ export function SpeedeeHoursView({ store, cutover }) {
                     <select
                       className="rounded border border-transparent bg-transparent py-1 text-sm text-content-primary outline-none focus:border-hairline-strong focus:bg-surface-overlay"
                       value={r.employee.position ?? ""}
+                      disabled={!canChangePosition(role)}
                       onChange={(e) => updateEmployee(empId, { position: e.target.value })}
                     >
                       {/* Migration 73: no position until one is confirmed. */}

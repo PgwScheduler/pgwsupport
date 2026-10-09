@@ -50,6 +50,10 @@ export const positionsForBrand = (brand, isHomeOffice = false) =>
 // carries it; at the Home Office any 'office' person may (migration 68).
 export const canBeSalaried = (position) => position === "manager" || position === "office";
 
+// A store user picks a position when adding someone; changing it after
+// that is district/regional/admin/master (migration 82 refuses it).
+export const canChangePosition = (role) => ["district", "regional", "admin", "master"].includes(role);
+
 export const num = (v) => {
   const n = typeof v === "number" ? v : parseFloat(v);
   return Number.isFinite(n) ? n : 0;

@@ -5,7 +5,7 @@ import { useEmployeeProfile } from "../../hooks/useEmployeeProfile.js";
 import { usePayrollConfig } from "../../hooks/usePayrollConfig.js";
 import { money } from "../../lib/format.js";
 import { LEGACY_DATE, RATE_TYPES, firstPayWeek, ratesOn, rowOn, weeksAlreadyStarted } from "../../lib/payRates.js";
-import { positionsForBrand, canBeSalaried } from "../../lib/payrollMath.js";
+import { positionsForBrand, canBeSalaried, canChangePosition } from "../../lib/payrollMath.js";
 import { addDays, asDate, iso, shiftWeek, thisWeekStart, weekEndOf, weekStartOf } from "../../lib/weekUtils.js";
 import { Field, GhostBtn, PrimaryBtn, inputCls } from "../ui.jsx";
 
@@ -95,7 +95,7 @@ export function EmployeeProfilePanel({ employeeId, onClose, onChanged, onNavigat
         {notice && <div className="mb-4"><Msg kind="ok">{notice}</Msg></div>}
         {e && (
           <div className="space-y-5">
-            <Details e={e} privileged={p.privileged} onSave={(patch) => changed(() => p.saveDetails(patch))} />
+            <Details e={e} privileged={p.privileged} positionLocked={!canChangePosition(role)} onSave={(patch) => changed(() => p.saveDetails(patch))} />
             <Employment key={e.id} e={e} privileged={p.privileged} transferredTo={p.transferredTo} onOpen={open}
               canTransfer={["admin", "master", "district", "regional"].includes(role)}
               transferForm={(close) => (
@@ -141,7 +141,7 @@ function StatusText({ e }) {
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; // Feb 29 allowed
 
-function Details({ e, privileged, onSave }) {
+function Details({ e, privileged, positionLocked, onSave }) {
   const initial = () => ({
     full_name: e.full_name ?? "",
     position: e.position ?? "",
@@ -180,7 +180,6 @@ function Details({ e, privileged, onSave }) {
     setSaving(true);
     const patch = {
       full_name: f.full_name.trim(),
-      position: f.position || null,
       hire_date: f.hire_date || null,
       rehire_date: f.rehire_date || null,
       birth_month: f.birth_month ? Number(f.birth_month) : null,
@@ -188,6 +187,8 @@ function Details({ e, privileged, onSave }) {
       employee_number: f.employee_number.trim() || null,
       adp_position_id: pid || null,
     };
+    // Store users can't change a position once the row exists (migration 82).
+    if (!positionLocked) patch.position = f.position || null;
     // Only admin/master see the salaried switch on the grid; same here.
     if (privileged) patch.is_store_manager = canBeSalaried(f.position) && f.is_store_manager;
     const { error } = await onSave(patch);
@@ -202,7 +203,8 @@ function Details({ e, privileged, onSave }) {
           <input className={inputCls} value={f.full_name} onChange={set("full_name")} />
         </Field>
         <Field label="Position">
-          <select className={inputCls} value={f.position} onChange={set("position")}>
+          <select className={inputCls} value={f.position} onChange={set("position")} disabled={positionLocked}
+            title={positionLocked ? "A district manager or administrator changes positions" : undefined}>
             {/* Migration 73: blank until the position is confirmed. */}
             {!f.position && <option value="">— Not set —</option>}
             {positions.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
