@@ -27,7 +27,9 @@ export function useCashDrawer(locationId) {
     const ids = [...new Set(closeouts.map((r) => r.submitted_by).filter(Boolean))];
     let names = {};
     if (ids.length) {
-      const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", ids);
+      // Names only, for anyone who can see the closeout (migration 84) --
+      // profiles itself is readable only for your own row.
+      const { data: profs } = await supabase.rpc("closeout_submitter_names", { p_ids: ids });
       names = Object.fromEntries((profs ?? []).map((p) => [p.id, p.full_name]));
     }
     setRows(closeouts.map((r) => ({ ...r, submitted_by_name: names[r.submitted_by] || "" })));
