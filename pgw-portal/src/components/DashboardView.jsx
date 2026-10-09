@@ -12,6 +12,7 @@ import { PayrollToSalesCard } from "./payroll/PayrollToSalesCard.jsx";
 import { DateRangeControl } from "./DateRangeControl.jsx";
 import { RangeWidgets } from "./dashboard/RangeWidgets.jsx";
 import { useDashboardRange } from "../hooks/useDashboardRange.js";
+import { MissingEntriesCard } from "./dashboard/MissingEntriesCard.jsx";
 
 function StatCard({ label, value, sub, tone }) {
   const toneCls = tone === "pos" ? "text-success" : tone === "neg" ? "text-danger" : "text-content-primary";
@@ -25,8 +26,9 @@ function StatCard({ label, value, sub, tone }) {
 }
 
 export function DashboardView({ store, onNavigate }) {
+  const { stores: allStores, setSelectedStoreId } = useAuth();
   // The Home Office has no sales to show (migration 68).
-  const stores = revenueStores(useAuth().stores);
+  const stores = revenueStores(allStores);
   const {
     latestDrawer, weekRows, docCount, week, cutover, isDaily, payrollToSales, loading, error,
   } = useDashboard(store.id);
@@ -85,6 +87,14 @@ export function DashboardView({ store, onNavigate }) {
         <p className="rounded-md border border-danger-border bg-danger-tint px-3 py-2 text-sm text-danger">
           {rangeData.error}
         </p>
+      )}
+
+      {/* Who has not entered yesterday's tic sheet (migration 80). Leads,
+          because every number below is only as good as that input. */}
+      {multiStore && (
+        <MissingEntriesCard
+          onOpenStore={(id) => { setSelectedStoreId(id); onNavigate("tic"); }}
+        />
       )}
 
       {/* The five range-driven widgets. They answer "how is the business
