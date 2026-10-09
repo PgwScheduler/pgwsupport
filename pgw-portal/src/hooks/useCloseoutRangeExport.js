@@ -31,11 +31,11 @@ export function useCloseoutRangeExport() {
 
         const records = data ?? [];
 
-        // Join submitter names (same approach as useCashDrawer).
+        // Join submitter names (same approach as useCashDrawer; migration 84).
         const ids = [...new Set(records.map((r) => r.submitted_by).filter(Boolean))];
         let names = {};
         if (ids.length) {
-          const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", ids);
+          const { data: profs } = await supabase.rpc("closeout_submitter_names", { p_ids: ids });
           names = Object.fromEntries((profs ?? []).map((p) => [p.id, p.full_name]));
         }
 
