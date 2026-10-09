@@ -23,6 +23,8 @@ import { UsersView } from "./components/users/UsersView.jsx";
 import { DirectoryView } from "./components/directory/DirectoryView.jsx";
 import { AuditLogView } from "./components/audit/AuditLogView.jsx";
 import { canSeeAuditLog } from "./lib/auditLog.js";
+import { AnnouncementsProvider } from "./hooks/useAnnouncements.js";
+import { AnnouncementsView } from "./components/announcements/AnnouncementsView.jsx";
 
 function FullScreenMessage({ children }) {
   return (
@@ -96,6 +98,7 @@ export default function App() {
     : viewAllowed(chosenView, currentStore) ? chosenView : HOME_OFFICE_DEFAULT_VIEW;
 
   return (
+    <AnnouncementsProvider>
     <Shell view={view} setView={setView}>
       {view === "dashboard" && (isOfficeRole(profile.role)
         ? <OfficeDashboard onNavigate={setView} />
@@ -112,6 +115,8 @@ export default function App() {
       {view === "reports" && canBuildReports(profile.role) && <ReportsView />}
       {view === "documents" && <DocumentsView key={"documents-" + currentStore.id} store={currentStore} />}
       {view === "training" && <TrainingView />}
+      {/* Company-wide feed scoped in SQL (migration 86), not keyed to currentStore. */}
+      {view === "announcements" && <AnnouncementsView />}
       {/* Company-wide for every role, so not keyed to currentStore. */}
       {view === "directory" && <DirectoryView />}
       {/* Within the caller's scope, with its own store filter -- not keyed
@@ -119,5 +124,6 @@ export default function App() {
       {view === "audit" && canSeeAuditLog(profile.role) && <AuditLogView />}
       {view === "users" && profile.role === "master" && <UsersView />}
     </Shell>
+    </AnnouncementsProvider>
   );
 }

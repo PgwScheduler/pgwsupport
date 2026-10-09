@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   LogOut, LayoutDashboard, GraduationCap, Banknote, Clock, CalendarDays, FileText,
-  ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound, ClipboardList, Wrench, Trophy, BarChart3, BookUser, History,
+  ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound, ClipboardList, Wrench, Trophy, BarChart3, BookUser, History, Megaphone,
 } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { canBuildReports } from "../lib/reportSpec.js";
@@ -11,9 +11,12 @@ import { canSeeAuditLog } from "../lib/auditLog.js";
 import { LogoMark, T } from "./ui.jsx";
 import { StorePicker } from "./StorePicker.jsx";
 import { ChangePasswordModal } from "./ChangePasswordModal.jsx";
+import { AnnouncementBanner } from "./announcements/AnnouncementBanner.jsx";
 
 const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  // Every role (migration 86): what was sent to your stores.
+  { key: "announcements", label: "Announcements", icon: Megaphone },
   { key: "training", label: "Training", icon: GraduationCap },
   { key: "drawer", label: "Cash Drawer", icon: Banknote },
   { key: "tic", label: "Daily Tic Sheet", icon: ClipboardList },
@@ -175,6 +178,9 @@ export function Shell({ view, setView, children }) {
             </span>
           </div>
         )}
+
+        {/* Unread announcements, above every screen (migration 86). */}
+        <AnnouncementBanner onShowAll={() => setView("announcements")} />
 
         <main className="flex-1 overflow-auto p-5">{children}</main>
       </div>
