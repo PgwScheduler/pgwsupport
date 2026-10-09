@@ -49,9 +49,11 @@ export function useBonusTracker(store, year, month) {
           .eq("location_id", locationId).eq("plan_year", year).order("kind").order("tier_index"),
         supabase.from("bonus_monthly_inputs").select("google_reviews, phone_conversion_pct, referral_gp_credit")
           .eq("location_id", locationId).eq("plan_year", year).eq("month", month).maybeSingle(),
-        supabase.from("bonus_model_rates").select("model, tier, role, pct"),
-        supabase.from("bonus_model_splits").select("model, role, share, sort_order"),
-        supabase.from("bonus_policy").select("key, value, note"),
+        // Rates are per plan year (migration 85): a 2027 change never
+        // re-prices a 2026 month.
+        supabase.from("bonus_model_rates").select("model, tier, role, pct").eq("plan_year", year),
+        supabase.from("bonus_model_splits").select("model, role, share, sort_order").eq("plan_year", year),
+        supabase.from("bonus_policy").select("key, value, note").eq("plan_year", year),
         // Answered questions stay in the table as the record of the
         // decision (migration 50); only open ones reach the screen.
         supabase.from("bonus_flags").select("code, severity, summary, detail, scope_location_id")
