@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import {
   LogOut, LayoutDashboard, GraduationCap, Banknote, Clock, CalendarDays, FileText,
-  ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound, ClipboardList, Wrench, Trophy, BarChart3, BookUser,
+  ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound, ClipboardList, Wrench, Trophy, BarChart3, BookUser, History,
 } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { canBuildReports } from "../lib/reportSpec.js";
 import { viewAllowed, revenueStores } from "../lib/homeOffice.js";
 import { roleViewAllowed } from "../lib/officeRole.js";
+import { canSeeAuditLog } from "../lib/auditLog.js";
 import { LogoMark, T } from "./ui.jsx";
 import { StorePicker } from "./StorePicker.jsx";
 import { ChangePasswordModal } from "./ChangePasswordModal.jsx";
@@ -30,6 +31,10 @@ const NAV = [
 // scopes and refuses on its own, so a store user who reached the screen
 // would still see exactly their own store.
 const REPORT_NAV = [{ key: "reports", label: "Reports", icon: BarChart3 }];
+
+// Change Log (migration 81): admin/master and district/regional. Hiding
+// it from stores and office is tidiness; audit_log RLS returns them nothing.
+const AUDIT_NAV = [{ key: "audit", label: "Change Log", icon: History }];
 
 const MASTER_NAV = [{ key: "users", label: "Users", icon: Users }];
 
@@ -70,6 +75,7 @@ export function Shell({ view, setView, children }) {
   const navItems = [
     ...NAV,
     ...(canBuildReports(role) ? REPORT_NAV : []),
+    ...(canSeeAuditLog(role) ? AUDIT_NAV : []),
     ...(role === "master" ? MASTER_NAV : []),
   ].filter((n) => viewAllowed(n.key, currentStore) && roleViewAllowed(n.key, role));
   const storeCount = revenueStores(stores).length;
