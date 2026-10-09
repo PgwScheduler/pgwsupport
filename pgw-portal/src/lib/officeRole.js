@@ -17,7 +17,9 @@ export const isOfficeRole = (role) => role === "office";
 // Dashboard is the office's own (components/dashboard/OfficeDashboard.jsx),
 // since the regular one is built around those. The Employee Schedule is in
 // (read-only; names come from schedule_people(), never the employee record).
-export const OFFICE_VIEWS = new Set(["dashboard", "drawer", "tic", "schedule", "reports", "training", "directory"]);
+// Announcements (migration 86): office reads AND posts them -- the one
+// place an office login writes.
+export const OFFICE_VIEWS = new Set(["dashboard", "announcements", "drawer", "tic", "schedule", "reports", "training", "directory"]);
 
 // Where an office login lands, and falls back to from a hidden screen.
 export const OFFICE_DEFAULT_VIEW = "dashboard";
