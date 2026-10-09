@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { ChevronLeft, ChevronRight, Trophy, AlertTriangle, Info, Lock, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trophy, AlertTriangle, Info, Lock, TrendingUp, Settings2 } from "lucide-react";
 import { useBonusTracker } from "../hooks/useBonusTracker.js";
+import { useAuth } from "../context/AuthProvider.jsx";
+import { BonusSetupView } from "./bonus/BonusSetupView.jsx";
 import { SectionHeader, Card, PrimaryBtn, GhostBtn, Empty, inputCls } from "./ui.jsx";
 import { money, pct, numOrDash } from "../lib/format.js";
 
@@ -191,6 +193,15 @@ function InputsPanel({ model, inputs, canEdit, canEditInputs, onSave, onClose })
 }
 
 export function BonusView({ store }) {
+  // Plan setup (migration 85) is for admin and master; the database
+  // enforces the same rule, this only decides whether to offer it.
+  const { role } = useAuth();
+  const [showSetup, setShowSetup] = useState(false);
+  if (showSetup && (role === "admin" || role === "master")) return <BonusSetupView onBack={() => setShowSetup(false)} />;
+  return <BonusTracker store={store} canSetup={role === "admin" || role === "master"} onSetup={() => setShowSetup(true)} />;
+}
+
+function BonusTracker({ store, canSetup, onSetup }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -213,7 +224,12 @@ export function BonusView({ store }) {
         title="Bonus Tracker"
         subtitle={`#${store.store_number} · ${store.name}${plan ? " · " + MODEL_BLURB[plan] : ""}`}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {canSetup && (
+              <GhostBtn onClick={onSetup} title="Copy a year's plans forward, edit the draft, publish">
+                <Settings2 className="h-4 w-4" /> Plan setup
+              </GhostBtn>
+            )}
             <GhostBtn onClick={() => shiftMonth(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></GhostBtn>
             <input type="month" value={`${year}-${pad2(month)}`} max={`${now.getFullYear()}-${pad2(now.getMonth() + 1)}`}
               onChange={(e) => { const [y, m] = e.target.value.split("-").map(Number);
