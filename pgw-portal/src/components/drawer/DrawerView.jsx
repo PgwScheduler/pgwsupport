@@ -10,6 +10,7 @@ import { Calc, CountGrid, Entry, MiniTable } from "./shared.jsx";
 import { CloseoutDetail } from "./CloseoutDetail.jsx";
 import { ExportRangeModal } from "../ExportRangeModal.jsx";
 import { isOfficeRole } from "../../lib/officeRole.js";
+import { useIsPhone } from "../../hooks/useMediaQuery.js";
 
 export function DrawerView({ store }) {
   const { role, stores } = useAuth();
@@ -23,6 +24,7 @@ export function DrawerView({ store }) {
   const canDelete = role === "master";
   const readOnly = isOfficeRole(role);
   const canExportRange = (stores?.length ?? 0) > 1;
+  const isPhone = useIsPhone();
 
   const set = (k) => (v) => setD((p) => ({ ...p, [k]: v }));
   const setQty = (side) => (k, v) => setD((p) => ({ ...p, [side]: { ...p[side], [k]: v } }));
@@ -59,12 +61,12 @@ export function DrawerView({ store }) {
   const editing = saved.find((r) => r.id === editingId) || null;
 
   return (
-    <div className="space-y-5">
+    <div className={"space-y-5" + (isPhone && !readOnly ? " pb-24" : "")}>
       <SectionHeader
         title="Cash Drawer Closeout"
         subtitle={`#${store.store_number} · ${store.name}`}
         action={readOnly ? null : (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {editingId && (
               <GhostBtn onClick={cancelEdit}><X className="h-4 w-4" /> Cancel edit</GhostBtn>
             )}
@@ -210,9 +212,9 @@ export function DrawerView({ store }) {
       </>)}
 
       <div>
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h3 className="pgw-display text-sm font-bold uppercase tracking-wide text-content-secondary">Saved closeouts</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {canExportRange && (
               <GhostBtn onClick={() => setRangeOpen(true)}><FileSpreadsheet className="h-4 w-4" /> Export range (Excel)</GhostBtn>
             )}
@@ -226,6 +228,37 @@ export function DrawerView({ store }) {
         ) : saved.length === 0 ? (
           <Empty icon={Banknote} title="No closeouts saved yet"
             hint={readOnly ? "This store hasn't saved a closeout yet." : "Fill out the sheet above and hit Save closeout."} />
+        ) : isPhone ? (
+          <Card className="divide-y divide-hairline overflow-hidden">
+            {saved.map((r) => {
+              const rt = computeTotals(r, float);
+              return (
+                <div key={r.id} className="flex items-center gap-2 px-4 py-3">
+                  <button onClick={() => setViewing(r)} className="min-w-0 flex-1 text-left" aria-label={`View closeout ${r.business_date}`}>
+                    <p className="text-sm font-medium text-content-primary">{r.business_date}</p>
+                    <p className="text-xs text-content-secondary">
+                      Deposit {money(rt.storeDeposit)} ·{" "}
+                      <span className={rt.diff < 0 ? "text-danger" : rt.diff > 0 ? "text-success" : "text-content-muted"}>
+                        {rt.diff < 0 ? "short" : rt.diff > 0 ? "over" : "even"} {money(rt.diff)}
+                      </span>
+                    </p>
+                  </button>
+                  {!readOnly && (
+                    <button onClick={() => startEdit(r)} aria-label={`Edit closeout ${r.business_date}`}
+                      className="rounded p-2.5 text-content-secondary hover:text-content-primary">
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button onClick={() => deleteCloseout(r.id)} aria-label={`Delete closeout ${r.business_date}`}
+                      className="rounded p-2.5 text-content-muted hover:text-danger">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </Card>
         ) : (
           <Card className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -277,6 +310,29 @@ export function DrawerView({ store }) {
           </Card>
         )}
       </div>
+
+      {/* Phones: the Save button sits at the top of a long form, so the
+          deposit figure and Save ride along at the bottom of the screen. */}
+      {isPhone && !readOnly && (
+        <div className="fixed inset-x-0 bottom-0 z-40 flex items-center gap-3 border-t border-hairline-strong bg-surface-card px-4 py-2.5"
+          style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom))" }}>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-content-muted">Cash to deposit</p>
+            <p className="pgw-display text-base font-bold" style={{ color: T.accentSoftText }}>
+              {money(t.cashToDeposit)}
+              {t.diff !== 0 && (
+                <span className={"ml-2 text-xs font-semibold " + (t.diff < 0 ? "text-danger" : "text-success")}>
+                  {t.diff < 0 ? "short" : "over"} {money(t.diff)}
+                </span>
+              )}
+            </p>
+          </div>
+          <PrimaryBtn onClick={save} disabled={saving} className="h-11 shrink-0">
+            <Check className="h-4 w-4" />
+            {saving ? "Saving…" : editingId ? "Update" : "Save"}
+          </PrimaryBtn>
+        </div>
+      )}
 
       {viewing && <CloseoutDetail record={viewing} store={store} onClose={() => setViewing(null)} onEdit={readOnly ? undefined : () => startEdit(viewing)} />}
       {rangeOpen && <ExportRangeModal storeCount={stores.length} onClose={() => setRangeOpen(false)} />}

@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthProvider.jsx";
 import { useHorizonUpload } from "../hooks/useHorizonUpload.js";
 import { isOfficeRole } from "../lib/officeRole.js";
 import { HorizonSendModal, LastUploadLine, ResendBanner } from "./HorizonSendModal.jsx";
-import { SectionHeader, Card, PrimaryBtn, GhostBtn, Empty, inputCls, T } from "./ui.jsx";
+import { SectionHeader, Card, PrimaryBtn, GhostBtn, Empty, LayoutToggle, inputCls, T } from "./ui.jsx";
 import { money, moneyCell, pct, numOrDash } from "../lib/format.js";
 import { computeTicSheet, daySales, dayPotential } from "../lib/ticSheetMath.js";
 import { SUMMARY_COLS, num, numToStr, toNum } from "../lib/ticSheetFields.js";
@@ -462,14 +462,7 @@ export function TicSheetView({ store }) {
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
       {cellError && <p className="mb-3 text-sm text-danger">{cellError}</p>}
 
-      <div className="mb-3 inline-flex rounded-md border border-hairline-strong bg-surface-overlay p-0.5 text-sm" role="group" aria-label="Layout">
-        {[["day", "One day"], ["grid", "Whole month"]].map(([k, label]) => (
-          <button key={k} onClick={() => setLayoutPick(k)} aria-pressed={layout === k}
-            className={"rounded px-3 py-1.5 font-medium " + (layout === k ? "bg-surface-raised text-content-primary" : "text-content-secondary hover:text-content-primary")}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <LayoutToggle className="mb-3" options={[["day", "One day"], ["grid", "Whole month"]]} value={layout} onChange={setLayoutPick} />
 
       {layout === "grid" && <GoalsStrip goals={goals} year={year} month={month} />}
 
