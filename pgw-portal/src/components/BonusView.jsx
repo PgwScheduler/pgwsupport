@@ -58,13 +58,15 @@ function FlagList({ flags }) {
   return (
     <Card className="mb-4 p-0">
       <button onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-5 py-3 text-left hover:bg-surface-overlay">
-        <AlertTriangle className="h-4 w-4 text-warning" />
-        <span className="text-sm font-semibold text-content-primary">
-          {flags.length} open question{flags.length === 1 ? "" : "s"} on this plan
-        </span>
-        <span className="text-xs text-content-muted">
-          {warn} awaiting a decision from BDC · built to the handout
+        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-surface-overlay sm:px-5">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+        <span className="min-w-0 sm:flex sm:items-baseline sm:gap-2">
+          <span className="block text-sm font-semibold text-content-primary">
+            {flags.length} open question{flags.length === 1 ? "" : "s"} on this plan
+          </span>
+          <span className="block text-xs text-content-muted">
+            {warn} awaiting a decision from BDC · built to the handout
+          </span>
         </span>
         <ChevronRight className={"ml-auto h-4 w-4 text-content-muted transition-transform " + (open ? "rotate-90" : "")} />
       </button>
@@ -134,7 +136,7 @@ function InputsPanel({ model, inputs, canEdit, canEditInputs, onSave, onClose })
           <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-content-secondary">
             Five-star Google reviews
           </span>
-          <input type="number" min="0" step="1" className={inputCls}
+          <input type="number" min="0" step="1" inputMode="numeric" className={inputCls}
             placeholder={canEditInputs ? "not entered" : "district manager"}
             value={vals.google_reviews} onChange={set("google_reviews")} disabled={!canEditInputs} />
           <span className="mt-1 block text-[11px] text-content-muted">
@@ -146,7 +148,7 @@ function InputsPanel({ model, inputs, canEdit, canEditInputs, onSave, onClose })
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-content-secondary">
               Phone conversion (%)
             </span>
-            <input type="number" min="0" step="0.1" className={inputCls}
+            <input type="number" min="0" step="0.1" inputMode="decimal" className={inputCls}
               placeholder={canEditInputs ? "not entered" : "district manager"}
               value={vals.phone_conversion_pct} onChange={set("phone_conversion_pct")} disabled={!canEditInputs} />
             {/* Stated at the point of entry, because the figure looks like
@@ -163,7 +165,7 @@ function InputsPanel({ model, inputs, canEdit, canEditInputs, onSave, onClose })
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-content-secondary">
               Midas referral GP credit ($)
             </span>
-            <input type="number" step="0.01" className={inputCls}
+            <input type="number" step="0.01" inputMode="decimal" className={inputCls}
               placeholder={canEdit ? "0.00" : "admin only"}
               value={vals.referral_gp_credit} onChange={set("referral_gp_credit")} disabled={!canEdit} />
             <span className="mt-1 block text-[11px] text-content-muted">
@@ -230,6 +232,7 @@ function BonusTracker({ store, canSetup, onSetup }) {
                 <Settings2 className="h-4 w-4" /> Plan setup
               </GhostBtn>
             )}
+            <div className="flex items-center gap-2">
             <GhostBtn onClick={() => shiftMonth(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></GhostBtn>
             <input type="month" value={`${year}-${pad2(month)}`} max={`${now.getFullYear()}-${pad2(now.getMonth() + 1)}`}
               onChange={(e) => { const [y, m] = e.target.value.split("-").map(Number);
@@ -238,6 +241,7 @@ function BonusTracker({ store, canSetup, onSetup }) {
             <GhostBtn onClick={() => shiftMonth(1)} disabled={year * 12 + (month - 1) >= curYm} aria-label="Next month">
               <ChevronRight className="h-4 w-4" />
             </GhostBtn>
+            </div>
           </div>
         }
       />
@@ -265,9 +269,11 @@ function BonusTracker({ store, canSetup, onSetup }) {
         <Empty icon={Trophy} title={`No targets for ${monthLabel(year, month)}`}
           hint="This store has a plan but no monthly targets for the month selected." />
       ) : (
-        <>
+        // Phones: the estimated payout moves up under attainment -- it is
+        // the figure a manager is checking. Desktop keeps source order.
+        <div className="flex flex-col">
           {/* attainment */}
-          <Card className="mb-4 p-5">
+          <Card className="order-1 mb-4 p-4 sm:p-5 md:order-none">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <TrendingUp className="h-4 w-4 text-content-muted" />
               <h3 className="pgw-display text-sm font-bold text-content-primary">
@@ -309,12 +315,12 @@ function BonusTracker({ store, canSetup, onSetup }) {
           </Card>
 
           {showInputs && (
-            <InputsPanel model={plan} inputs={inputs} canEdit={canEdit} canEditInputs={canEditInputs}
-              onSave={saveInputs} onClose={() => setShowInputs(false)} />
+            <div className="order-3 md:order-none"><InputsPanel model={plan} inputs={inputs} canEdit={canEdit} canEditInputs={canEditInputs}
+              onSave={saveInputs} onClose={() => setShowInputs(false)} /></div>
           )}
 
           {/* the pool, line by line */}
-          <Card className="mb-4 p-0">
+          <Card className="order-4 mb-4 p-0 md:order-none">
             <div className="border-b border-hairline px-5 py-3">
               <h3 className="pgw-display text-sm font-bold text-content-primary">
                 {plan === "A" ? "Bonus pool" : "Bonus"}
@@ -324,11 +330,11 @@ function BonusTracker({ store, canSetup, onSetup }) {
               <tbody>
                 {result.lines.map((l) => (
                   <tr key={l.key} className="border-b border-hairline">
-                    <td className="px-5 py-2.5">
+                    <td className="px-4 py-2.5 sm:px-5">
                       <span className="text-content-primary">{l.label}</span>
                       {l.note && <span className="ml-2 text-xs text-content-muted">{l.note}</span>}
                     </td>
-                    <td className="w-40 px-5 py-2.5 text-right">
+                    <td className="w-28 px-4 py-2.5 text-right sm:w-40 sm:px-5">
                       {l.status && l.amount === 0 ? (
                         <span className={"text-xs " + (STATUS_STYLE[l.status] ?? "text-content-muted")}>
                           {STATUS_LABEL[l.status] ?? l.status}
@@ -353,7 +359,7 @@ function BonusTracker({ store, canSetup, onSetup }) {
 
           {/* penalty — calculated, shown, never deducted */}
           {result.penalty && result.penalty.amount > 0 && (
-            <Card className="mb-4 border-warning-border p-5">
+            <Card className="order-5 mb-4 border-warning-border p-4 sm:p-5 md:order-none">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                 <div className="flex-1">
@@ -398,7 +404,7 @@ function BonusTracker({ store, canSetup, onSetup }) {
           )}
 
           {/* who gets paid */}
-          <Card className="p-0">
+          <Card className="order-2 mb-4 p-0 md:order-none md:mb-0">
             <div className="border-b border-hairline px-5 py-3">
               <h3 className="pgw-display text-sm font-bold text-content-primary">Estimated payout</h3>
             </div>
@@ -406,11 +412,11 @@ function BonusTracker({ store, canSetup, onSetup }) {
               <tbody>
                 {result.payouts.map((p) => (
                   <tr key={p.role} className="border-b border-hairline last:border-0">
-                    <td className="px-5 py-3 text-content-primary">
+                    <td className="px-4 py-3 text-content-primary sm:px-5">
                       {p.role}
                       {p.share != null && <span className="ml-2 text-xs text-content-muted">{pct(p.share, 0)}</span>}
                     </td>
-                    <td className="w-40 px-5 py-3 text-right pgw-display font-bold text-content-primary">
+                    <td className="w-28 px-4 py-3 text-right pgw-display font-bold text-content-primary sm:w-40 sm:px-5">
                       {money(p.amount)}
                     </td>
                   </tr>
@@ -429,7 +435,7 @@ function BonusTracker({ store, canSetup, onSetup }) {
               </p>
             )}
           </Card>
-        </>
+        </div>
       )}
     </div>
   );
