@@ -17,10 +17,12 @@ import { rangeFor, rangeLabel } from "../lib/dateRange.js";
 // =====================================================================
 // The Report Builder's state and its calls into the database.
 //
-// SCOPE IS NOT DECIDED HERE. `stores` from AuthProvider is already the
-// set can_access_location() allows, and the ids sent to report_build()
-// only narrow it further — the function re-checks every one. Nothing on
-// this side of the wire can widen a user's reach.
+// SCOPE IS NOT DECIDED HERE. `stores` is the set report_build() will
+// cover for this user -- AuthProvider's list, or for a store login
+// report_stores() (migration 89: every real store, which a store login
+// cannot read from public.locations). The ids sent to report_build()
+// only narrow it further, and the function re-checks every one. Nothing
+// on this side of the wire can widen a user's reach.
 //
 // RUNNING IS EXPLICIT. Thirty-six stores by day is not a query to fire
 // on every checkbox click, so `run()` is a button. The result carries
@@ -34,7 +36,20 @@ export function useReportBuilder() {
   // The Home Office earns no revenue and report_build() skips it
   // (migration 68), so it is not offered as a store to report on.
   const { stores: allStores, currentStore, role } = useAuth();
-  const stores = useMemo(() => revenueStores(allStores), [allStores]);
+  const [reportStores, setReportStores] = useState(null);
+  useEffect(() => {
+    if (role !== "store") return undefined;
+    let cancelled = false;
+    supabase.rpc("report_stores").then(({ data, error: err }) => {
+      // On failure the picker falls back to the store's own row.
+      if (!cancelled) setReportStores(err ? null : data ?? []);
+    });
+    return () => { cancelled = true; };
+  }, [role]);
+  const stores = useMemo(
+    () => revenueStores(role === "store" && reportStores ? reportStores : allStores),
+    [role, reportStores, allStores]
+  );
   const { from, to, preset, setPreset } = useDateRange();
 
   const [catalog, setCatalog] = useState([]);
@@ -198,8 +213,12 @@ export function useReportBuilder() {
     if (!orderedMeasures.length || !selectedStoreIds.length) return;
     setRunning(true);
     setError(null);
-    const altSpec = altWindow && alt?.measures?.length
-      ? { from: altWindow.from, to: altWindow.to, measures: alt.measures }
+    // Only alt-window measures that are still selected: a preset's alt
+    // measure the user has since unticked is dropped, and report_build()
+    // refuses one that is not also selected (migration 89).
+    const altMeasures = (alt?.measures ?? []).filter((m) => orderedMeasures.includes(m));
+    const altSpec = altWindow && altMeasures.length
+      ? { from: altWindow.from, to: altWindow.to, measures: altMeasures }
       : null;
     const { data, error: err } = await callBuild({
       measures: orderedMeasures,
