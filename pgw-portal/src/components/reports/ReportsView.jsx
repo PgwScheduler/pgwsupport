@@ -17,6 +17,7 @@ import {
 } from "../../lib/reportSpec.js";
 import { formatWithRules, tokenStyle } from "../../lib/reportFormat.js";
 import { rangeLabel, presetLabel } from "../../lib/dateRange.js";
+import { useIsPhone } from "../../hooks/useMediaQuery.js";
 
 // =====================================================================
 // Report Builder — the generic builder, and the five reports leadership
@@ -70,15 +71,15 @@ export function ReportsView() {
     <div className="space-y-4">
       <SectionHeader
         title="Reports"
-        subtitle={area === "daily" ? "Matt's daily reports, from the stores' tic sheets."
+        subtitle={area === "daily" ? null
           : area === "wsw" ? "Who Sold What: services sold as a % of cars, by store, month over month."
           : area === "ranks" ? "Tech Ranks: each division's top 10 and the company top 20 by hours turned."
           : "Build any report from portal data."}
       />
-      <div role="tablist" className="flex gap-1 border-b border-hairline">
+      <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-hairline [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map(([k, label]) => (
           <button key={k} role="tab" aria-selected={area === k} onClick={() => setArea(k)}
-            className={"border-b-2 px-3 py-2 text-sm font-medium " + (area === k ? "border-accent text-content-primary" : "border-transparent text-content-secondary hover:text-content-primary")}>
+            className={"shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium " + (area === k ? "border-accent text-content-primary" : "border-transparent text-content-secondary hover:text-content-primary")}>
             {label}
           </button>
         ))}
@@ -94,6 +95,7 @@ function ReportBuilder() {
   const { role } = useAuth();
   const { result } = b;
   const [showImport, setShowImport] = useState(false);
+  const isPhone = useIsPhone();
 
   const canRun = b.selectedMeasures.length > 0 && b.selectedStoreIds.length > 0;
   const rows = result?.rows ?? [];
@@ -130,7 +132,7 @@ function ReportBuilder() {
       : <ArrowDown className="ml-1 inline h-3 w-3" />;
 
   return (
-    <div className="space-y-4">
+    <div className={"space-y-4" + (isPhone ? " pb-20" : "")}>
       <SectionHeader
         title="Report Builder"
         subtitle="Pick stores, measures and a grouping."
@@ -276,7 +278,7 @@ function ReportBuilder() {
       )}
 
       {result && (
-        <Card className="overflow-hidden">
+        <Card id="report-result" className="scroll-mt-3 overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline px-4 py-2.5">
             <div>
               <h3 className="pgw-display text-sm font-bold text-content-primary">
@@ -380,6 +382,26 @@ function ReportBuilder() {
             every level and dollar totals stay totals, which is why the company row mixes the two.
           </p>
         </Card>
+      )}
+
+      {/* Phones: Run report lives in the header, above three long pickers,
+          so it also rides along at the bottom of the screen. */}
+      {isPhone && (
+        <div className="fixed inset-x-0 bottom-0 z-40 flex items-center gap-3 border-t border-hairline-strong bg-surface-card px-4 py-2.5"
+          style={{ paddingBottom: "max(0.625rem, env(safe-area-inset-bottom))" }}>
+          <p className="min-w-0 flex-1 text-xs text-content-secondary">
+            {b.selectedStoreIds.length} store{b.selectedStoreIds.length === 1 ? "" : "s"} · {b.selectedMeasures.length} measure
+            {b.selectedMeasures.length === 1 ? "" : "s"} · by {groupByLabel(b.groupBy).toLowerCase()}
+          </p>
+          <PrimaryBtn className="h-11 shrink-0" disabled={!canRun || b.running}
+            onClick={async () => {
+              await b.run();
+              // After React has drawn the result.
+              setTimeout(() => document.getElementById("report-result")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+            }}>
+            <Play className="h-4 w-4" /> {b.running ? "Running…" : "Run"}
+          </PrimaryBtn>
+        </div>
       )}
 
       {showImport && <PriorYearImportModal onClose={() => setShowImport(false)} />}

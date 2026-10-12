@@ -4,6 +4,7 @@ import { useScorecard } from "../../hooks/useScorecard.js";
 import { PRESETS, buildMarkets, buildScorecard, buildTires, sortRows } from "../../lib/scorecard.js";
 import { cellStyle, evaluate } from "../../lib/scorecardRules.js";
 import { Card, GhostBtn } from "../ui.jsx";
+import { useIsPhone } from "../../hooks/useMediaQuery.js";
 
 // =====================================================================
 // Matt's daily reports on screen: Report 1 (Daily Scorecard), Report 2
@@ -67,7 +68,13 @@ function StoreName({ row }) {
 }
 
 function Table({ report, cols, rows, footer = [], settings, hidden = new Set() }) {
-  const shown = cols.filter(([k]) => !hidden.has(k));
+  // Matt's workbook puts the store name mid-table (column 6 on the
+  // scorecard). On a phone the table scrolls sideways and the name scrolls
+  // away with it, so phones get it first and pinned; desktop keeps his order.
+  const isPhone = useIsPhone();
+  const visible = cols.filter(([k]) => !hidden.has(k));
+  const shown = isPhone ? [...visible.filter(([k]) => k === "name"), ...visible.filter(([k]) => k !== "name")] : visible;
+  const pin = (k, bg) => (isPhone && k === "name" ? ` sticky left-0 z-10 ${bg}` : "");
   const cell = (row, [key, , fmt]) => {
     if (key === "name") return <StoreName row={row} />;
     const token = row.isTotal ? null : evaluate(report, key, row, settings);
@@ -84,7 +91,7 @@ function Table({ report, cols, rows, footer = [], settings, hidden = new Set() }
         <thead className="bg-surface-overlay text-[11px] text-content-secondary">
           <tr>
             {shown.map(([k, label]) => (
-              <th key={k} className={"whitespace-nowrap px-2 py-2 font-medium " + (k === "name" ? "text-left" : "")}>{label}</th>
+              <th key={k} className={"whitespace-nowrap px-2 py-2 font-medium " + (k === "name" ? "text-left" : "") + pin(k, "bg-surface-overlay")}>{label}</th>
             ))}
           </tr>
         </thead>
@@ -92,14 +99,14 @@ function Table({ report, cols, rows, footer = [], settings, hidden = new Set() }
           {rows.map((r) => (
             <tr key={r.id ?? r.marketId ?? r.name} className="hover:bg-surface-overlay">
               {shown.map((c) => (
-                <td key={c[0]} className={"px-1 py-1 " + (c[0] === "name" ? "text-left" : "")}>{cell(r, c)}</td>
+                <td key={c[0]} className={"px-1 py-1 " + (c[0] === "name" ? "text-left" : "") + pin(c[0], "bg-surface-card")}>{cell(r, c)}</td>
               ))}
             </tr>
           ))}
           {footer.map((r) => (
             <tr key={"t-" + r.name} className="bg-surface-page font-semibold">
               {shown.map((c) => (
-                <td key={c[0]} className={"px-1 py-1 " + (c[0] === "name" ? "text-left" : "")}>{cell(r, c)}</td>
+                <td key={c[0]} className={"px-1 py-1 " + (c[0] === "name" ? "text-left" : "") + pin(c[0], "bg-surface-page")}>{cell(r, c)}</td>
               ))}
             </tr>
           ))}
@@ -199,10 +206,10 @@ export function ScorecardView() {
         </p>
       )}
 
-      <div role="tablist" className="flex gap-1 border-b border-hairline">
+      <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-hairline [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {TABS.map(([k, label]) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => pickTab(k)}
-            className={"border-b-2 px-3 py-2 text-sm font-medium " + (tab === k ? "border-accent text-content-primary" : "border-transparent text-content-secondary hover:text-content-primary")}>
+            className={"shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium " + (tab === k ? "border-accent text-content-primary" : "border-transparent text-content-secondary hover:text-content-primary")}>
             {label}
           </button>
         ))}
