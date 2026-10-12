@@ -13,9 +13,12 @@ import { isHomeOffice } from "../lib/homeOffice.js";
 import { money, pct, numOrDash } from "../lib/format.js";
 import { exportPayrollCSV, printPayroll } from "../lib/payrollExport.js";
 import { SpeedeeHoursView } from "./SpeedeeHoursView.jsx";
-import { Card, GhostBtn, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
+import { Card, GhostBtn, LayoutToggle, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
 import { EmployeeProfilePanel } from "./payroll/EmployeeProfilePanel.jsx";
 import { DayCell, DayModeToggle } from "./payroll/DayCell.jsx";
+import { PayrollPhoneList, PAYROLL_LAYOUTS } from "./payroll/PayrollPhoneList.jsx";
+import { useIsPhone } from "../hooks/useMediaQuery.js";
+
 
 // The Employee Hours tab follows the store's brand — managers never toggle it.
 //
@@ -76,6 +79,9 @@ function MidasHoursView({ store, cutover, onNavigate }) {
   const weekList = useMemo(() => weeksInRange(from, to, cutover), [from, to, cutover]);
   const [week, setWeek] = useState(() => thisWeekStart(cutover));
   const [dayMode, setDayMode] = useState("hours_worked");
+  const isPhone = useIsPhone();
+  const [layoutPick, setLayoutPick] = useState(null);
+  const layout = layoutPick ?? (isPhone ? "day" : "grid");
 
   // Keep the open week inside the range. Landing on the LAST week in the
   // range is the useful default: for month-to-date that is the week in
@@ -168,6 +174,40 @@ function MidasHoursView({ store, cutover, onNavigate }) {
     const o = ov[empId];
     if (o && field in o) return o[field];
     return serverVal ?? "";
+  };
+
+  // The phone list's per-person weekly figures: the grid's non-day columns,
+  // with the same edit rights (Sales Required and pay are office-only).
+  const positionLabel = (k) => positions.find(([p]) => p === k)?.[1] ?? "Position not set";
+  const weeklyFields = (r) => {
+    const sc = computeStoreRow(r.mEntry);
+    const f = [{ label: "PTO days", field: "pto_days", server: r.mEntry.pto_days }];
+    if (!isDaily) {
+      f.push({ label: "Clock here", value: numOrDash(r.mEntry.clock_hours), locked: "Closed week" },
+        { label: "Clock other", value: numOrDash(r.mEntry.clock_hours_other), locked: "Closed week" });
+    }
+    if (!office) {
+      f.push(
+        { label: "Actual sales", field: "actual_sales", server: r.mEntry.actual_sales },
+        privileged
+          ? { label: "Sales required", field: "sales_required", server: r.mEntry.sales_required }
+          : { label: "Sales required", value: r.mEntry.sales_required == null ? "—" : numOrDash(r.mEntry.sales_required), locked: "Set by the office" },
+        { label: "Work orders", field: "work_orders", server: r.mEntry.work_orders },
+        { label: "Total turned", value: numOrDash(sc.totalTurned) },
+        { label: "Productivity", value: sc.productivity == null ? "—" : sc.productivity.toFixed(2) },
+        { label: "% of goal", value: pct(sc.pctOfGoal) },
+        { label: "ARO", value: sc.aro == null ? "—" : sc.aro.toFixed(2) },
+      );
+      if (isDaily) f.push({ label: "Other store hrs", value: numOrDash(r.mEntry.total_hours_other) });
+      if (r.flatFlag) f.push({ label: "Flag", value: "FLAT" });
+    }
+    if (privileged) {
+      const pc = computePayRow(r.mEntry, r.mRate, r.mPay);
+      f.push({ label: "Bonus", field: "bonus", server: r.mPay.bonus },
+        { label: "Incentives", field: "incentives", server: r.mPay.incentives },
+        { label: "Paycheck", value: money(pc.paycheck) });
+    }
+    return f;
   };
 
   // A new person lands straight in their profile: hire date, ADP ID and
@@ -270,6 +310,17 @@ function MidasHoursView({ store, cutover, onNavigate }) {
         </p>
       )}
 
+      <LayoutToggle className="mb-3" options={PAYROLL_LAYOUTS} value={layout} onChange={setLayoutPick} />
+
+      {layout === "day" ? (
+        <PayrollPhoneList
+          rows={merged} dates={dates} dayLabels={dayLabels} isDaily={isDaily}
+          dayMode={dayMode} modeLabel={DAY_MODES.find(([k]) => k === dayMode)[1]}
+          saveDay={saveDay} onOpenProfile={setProfileId} positionLabel={positionLabel}
+          totalHours={(r) => computeStoreRow(r.mEntry).totalHours}
+          weekly={weeklyFields} val={val} commit={commit} loading={loading}
+        />
+      ) : (
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-surface-overlay text-left text-xs uppercase tracking-wide text-content-secondary">
@@ -511,11 +562,12 @@ function MidasHoursView({ store, cutover, onNavigate }) {
           </tbody>
         </table>
       </Card>
+      )}
 
       {/* Add employee to roster */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
-          className="w-48 rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-sm text-content-primary outline-none focus:border-hairline-strong"
+          className="w-full rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-sm sm:w-48 text-content-primary outline-none focus:border-hairline-strong"
           placeholder="New employee name"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}

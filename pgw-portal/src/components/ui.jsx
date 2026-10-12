@@ -65,6 +65,22 @@ export function GhostBtn({ children, className = "", ...p }) {
   );
 }
 
+// Two-or-three-way layout switch (e.g. One day / Whole month). `options` is
+// [[key, label], ...]. Phones get the compact layout by default; this lets
+// anyone reach the other.
+export function LayoutToggle({ options, value, onChange, className = "" }) {
+  return (
+    <div className={"inline-flex rounded-md border border-hairline-strong bg-surface-overlay p-0.5 text-sm " + className} role="group" aria-label="Layout">
+      {options.map(([k, label]) => (
+        <button key={k} onClick={() => onChange(k)} aria-pressed={value === k}
+          className={"rounded px-3 py-1.5 font-medium " + (value === k ? "bg-surface-raised text-content-primary" : "text-content-secondary hover:text-content-primary")}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function SectionHeader({ title, subtitle, action }) {
   return (
     <div className="mb-4 flex flex-wrap items-end justify-between gap-3">

@@ -20,6 +20,25 @@ const roCell = "w-16 px-1 py-1 text-right text-sm text-content-secondary";
 // Local draft state rather than a debounce: a keystroke should never race
 // a write, and hours are committed on blur or Enter.
 export function DayCell({ empId, date, field, day, saveDay, first, disabled }) {
+  const edge = first ? " border-l border-hairline-strong" : "";
+  const fromTech = day?.source === "tech";
+  if (fromTech || disabled) {
+    return (
+      <td className={roCell + edge} title={fromTech ? "Entered in the Tech Tracker" : "Read-only"}>
+        <DayInput {...{ empId, date, field, day, saveDay, disabled }} />
+      </td>
+    );
+  }
+  return (
+    <td className={"px-1 py-1.5 text-right" + edge}>
+      <DayInput {...{ empId, date, field, day, saveDay }} className={cell} />
+    </td>
+  );
+}
+
+// The cell's content without the <td>, so the phone list can use the same
+// draft-and-commit behaviour with a bigger field.
+export function DayInput({ empId, date, field, day, saveDay, disabled, className = cell, ...rest }) {
   const server = day?.[field] ?? 0;
   const fromTech = day?.source === "tech";
   const [draft, setDraft] = useState(null);
@@ -28,19 +47,12 @@ export function DayCell({ empId, date, field, day, saveDay, first, disabled }) {
   // change, a mode change, or a refetch after a rejected write.
   useEffect(() => { setDraft(null); }, [date, field, empId]);
 
-  const edge = first ? " border-l border-hairline-strong" : "";
-
   if (fromTech || disabled) {
     return (
-      <td
-        className={roCell + edge}
-        title={fromTech ? "Entered in the Tech Tracker" : "Read-only"}
-      >
-        <span className="inline-flex items-center gap-1">
-          {numOrDash(server)}
-          {fromTech && <Lock className="h-3 w-3 text-content-muted" />}
-        </span>
-      </td>
+      <span className="inline-flex items-center gap-1" title={fromTech ? "Entered in the Tech Tracker" : "Read-only"}>
+        {numOrDash(server)}
+        {fromTech && <Lock className="h-3 w-3 text-content-muted" aria-label="From the Tech Tracker" />}
+      </span>
     );
   }
 
@@ -53,17 +65,16 @@ export function DayCell({ empId, date, field, day, saveDay, first, disabled }) {
   };
 
   return (
-    <td className={"px-1 py-1.5 text-right" + edge}>
-      <input
-        className={cell}
-        value={draft ?? (server === 0 ? "" : server)}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commitCell}
-        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-        inputMode="decimal"
-        placeholder="0"
-      />
-    </td>
+    <input
+      className={className}
+      value={draft ?? (server === 0 ? "" : server)}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commitCell}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      inputMode="decimal"
+      placeholder="0"
+      {...rest}
+    />
   );
 }
 

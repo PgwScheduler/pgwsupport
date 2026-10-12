@@ -11,9 +11,11 @@ import {
 import { useAuth } from "../context/AuthProvider.jsx";
 import { money, pct, numOrDash } from "../lib/format.js";
 import { exportSpeedeeCSV, printSpeedee } from "../lib/payrollExport.js";
-import { Card, GhostBtn, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
+import { Card, GhostBtn, LayoutToggle, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
 import { EmployeeProfilePanel } from "./payroll/EmployeeProfilePanel.jsx";
 import { DayCell, DayModeToggle } from "./payroll/DayCell.jsx";
+import { PayrollPhoneList, PAYROLL_LAYOUTS } from "./payroll/PayrollPhoneList.jsx";
+import { useIsPhone } from "../hooks/useMediaQuery.js";
 
 // SpeeDee turns no hours, so its day columns carry only the two figures
 // that apply. payroll_daily itself is brand-agnostic.
@@ -51,6 +53,9 @@ export function SpeedeeHoursView({ store, cutover }) {
   }, [weekList, week]);
   const weekIdx = weekList.indexOf(week);
   const [dayMode, setDayMode] = useState("hours_worked");
+  const isPhone = useIsPhone();
+  const [layoutPick, setLayoutPick] = useState(null);
+  const layout = layoutPick ?? (isPhone ? "day" : "grid");
   const {
     rows, dates, isDaily, privileged, rpcSummary, weekSales, loading, error,
     addEmployee, updateEmployee, saveEntry, saveDay, savePay, saveWeekSales, refetch,
@@ -145,6 +150,31 @@ export function SpeedeeHoursView({ store, cutover }) {
     if (emp) setProfileId(emp.id);
   };
 
+  // The phone list's per-person weekly figures, with the grid's edit rights.
+  const positionLabel = (k) => SPEEDEE_POSITIONS.find(([p]) => p === k)?.[1] ?? "Position not set";
+  const weeklyFields = (r) => {
+    const sc = computeSpeedeeStoreRow(r.mEntry, r.roleSalesRate);
+    const f = [{ label: "PTO days", field: "pto_days", server: r.mEntry.pto_days }];
+    if (!isDaily) {
+      f.push({ label: "Clock here", value: numOrDash(r.mEntry.clock_hours), locked: "Closed week" },
+        { label: "Clock other", value: numOrDash(r.mEntry.clock_hours_other), locked: "Closed week" });
+    }
+    f.push(
+      { label: "Spiffs", field: "spiffs", server: r.mEntry.spiffs },
+      privileged
+        ? { label: "Labor sales", field: "labor_sales", server: r.mEntry.labor_sales }
+        : { label: "Labor sales", value: r.mEntry.labor_sales == null ? "—" : numOrDash(r.mEntry.labor_sales), locked: "Set by the office" },
+      privileged
+        ? { label: "Labor %", field: "labor_pct_rate", server: r.employee.labor_pct_rate, placeholder: "0.10" }
+        : { label: "Labor %", value: r.employee.labor_pct_rate == null ? "—" : numOrDash(r.employee.labor_pct_rate, 4), locked: "Set by the office" },
+      { label: "Labor % eligible", value: r.employee.labor_pct_eligible ? "Yes" : "No" },
+      { label: "Total incentive", value: money(sc.totalIncentive) },
+      { label: "Sales expectation", value: money(sc.salesExpectation) },
+    );
+    if (privileged) f.push({ label: "Paycheck (entered)", field: "paycheck_amount", server: r.mPay.paycheck_amount, placeholder: "enter" });
+    return f;
+  };
+
   const exportRows = merged.map((r) => ({ ...r, actualWeeklySales, salesRequired }));
 
   return (
@@ -209,6 +239,17 @@ export function SpeedeeHoursView({ store, cutover }) {
         <SummaryStat label="Payroll %" value={pct(summary.payrollPct)} target={SPEEDEE_TARGET} ratio={summary.payrollPct} />
       </div>
 
+      <LayoutToggle className="mb-3" options={PAYROLL_LAYOUTS} value={layout} onChange={setLayoutPick} />
+
+      {layout === "day" ? (
+        <PayrollPhoneList
+          rows={merged} dates={dates} dayLabels={dayLabels} isDaily={isDaily}
+          dayMode={dayMode} modeLabel={DAY_MODES.find(([k]) => k === dayMode)[1]}
+          saveDay={saveDay} onOpenProfile={setProfileId} positionLabel={positionLabel}
+          totalHours={(r) => computeSpeedeeStoreRow(r.mEntry, r.roleSalesRate).totalHours}
+          weekly={weeklyFields} val={val} commit={commit} loading={loading}
+        />
+      ) : (
       <Card className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-surface-overlay text-left text-xs uppercase tracking-wide text-content-secondary">
@@ -379,6 +420,7 @@ export function SpeedeeHoursView({ store, cutover }) {
           </tbody>
         </table>
       </Card>
+      )}
 
       {privileged && (
         <p className="mt-2 text-xs text-content-muted">
@@ -389,7 +431,7 @@ export function SpeedeeHoursView({ store, cutover }) {
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
-          className="w-48 rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-sm text-content-primary outline-none focus:border-hairline-strong"
+          className="w-full rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-sm sm:w-48 text-content-primary outline-none focus:border-hairline-strong"
           placeholder="New employee name"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}

@@ -11,10 +11,10 @@ export function CloseoutDetail({ record, store, onClose, onEdit }) {
   const t = computeTotals(record, store.drawer_float);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-scrim p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-scrim sm:p-4" onClick={onClose}>
       <div className="mx-auto max-w-5xl" onClick={(ev) => ev.stopPropagation()}>
-        <Card className="overflow-hidden">
-          <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-hairline bg-surface-card px-5 py-3">
+        <Card className="overflow-hidden rounded-none sm:rounded-xl">
+          <div className="sticky top-0 flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface-card px-5 py-3">
             <div>
               <h3 className="pgw-display text-base font-bold text-content-primary">Closeout — {record.business_date}</h3>
               <p className="text-xs text-content-muted">
@@ -23,19 +23,19 @@ export function CloseoutDetail({ record, store, onClose, onEdit }) {
                 {record.created_at ? ` · saved ${new Date(record.created_at).toLocaleString()}` : ""}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {onEdit && (
                 <GhostBtn onClick={onEdit}><Pencil className="h-4 w-4" /> Edit</GhostBtn>
               )}
               <GhostBtn onClick={() => exportCloseoutCSV(record, store)}><Download className="h-4 w-4" /> CSV</GhostBtn>
               <GhostBtn onClick={() => printCloseout(record, store)}><Printer className="h-4 w-4" /> Print / PDF</GhostBtn>
-              <button onClick={onClose} className="rounded-md p-1.5 text-content-secondary hover:bg-surface-overlay hover:text-content-primary">
+              <button onClick={onClose} aria-label="Close" className="rounded-md p-2 text-content-secondary hover:bg-surface-overlay hover:text-content-primary">
                 <X className="h-5 w-5" />
               </button>
             </div>
           </div>
 
-          <div className="space-y-5 p-5">
+          <div className="space-y-5 p-3 sm:p-5">
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <div className="rounded-lg p-3" style={{ backgroundColor: T.accentSoftBg }}>
                 <p className="text-[11px] uppercase tracking-wide text-content-secondary">Cash to Deposit</p>

@@ -1,13 +1,14 @@
 import React from "react";
+import { useIsPhone } from "../../hooks/useMediaQuery.js";
 import { Trash2, Plus } from "lucide-react";
 import { Card } from "../ui.jsx";
 import { COINS, BILLS, num } from "../../lib/denoms.js";
 import { money } from "../../lib/format.js";
 
 export const cashCell =
-  "w-28 rounded border border-hairline-strong bg-surface-overlay px-2 py-1 text-right text-sm text-content-primary outline-none focus:border-hairline-strong";
+  "w-28 rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-right md:py-1 text-sm text-content-primary outline-none focus:border-hairline-strong";
 export const tblInput =
-  "w-full rounded border border-hairline-strong bg-surface-overlay px-2 py-1 text-sm text-content-primary outline-none focus:border-hairline-strong";
+  "w-full rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-sm md:py-1 text-content-primary outline-none focus:border-hairline-strong";
 
 /* A read-only computed figure */
 export function Calc({ label, value, hint, tone, big }) {
@@ -31,7 +32,9 @@ export function Entry({ label, hint, value, onChange }) {
         <p className="text-sm font-medium text-content-secondary">{label}</p>
         {hint && <p className="text-[11px] text-content-muted">{hint}</p>}
       </div>
-      <input className={cashCell} value={value} onChange={(e) => onChange(e.target.value)} placeholder="0.00" />
+      {/* Decimal keypad on phones; signs still allowed by the math. */}
+      <input className={cashCell} value={value} onChange={(e) => onChange(e.target.value)} placeholder="0.00"
+        inputMode="decimal" aria-label={label} />
     </div>
   );
 }
@@ -41,8 +44,10 @@ export function CountGrid({ title, qty, onChange, total }) {
     <div key={k} className="flex items-center justify-between gap-2 py-1">
       <span className="w-20 text-sm text-content-secondary">{label}</span>
       <input
-        className="w-16 rounded border border-hairline-strong bg-surface-overlay px-2 py-1 text-center text-sm text-content-primary outline-none focus:border-hairline-strong"
+        className="w-16 rounded border border-hairline-strong bg-surface-overlay px-2 py-2 text-center text-sm text-content-primary outline-none focus:border-hairline-strong md:py-1"
         value={qty[k] ?? ""}
+        inputMode="numeric"
+        aria-label={`${title} ${label} quantity`}
         onChange={(e) => onChange(k, e.target.value)}
         placeholder="0"
       />
@@ -103,6 +108,8 @@ export function CountRecap({ title, qty, total }) {
 }
 
 export function MiniTable({ title, note, cols, rows, onCell, onAddRow, onDelRow, total }) {
+  const isPhone = useIsPhone();
+  if (isPhone) return <MiniTableStacked {...{ title, note, cols, rows, onCell, onAddRow, onDelRow, total }} />;
   return (
     <Card className="overflow-hidden">
       <div className="border-b border-hairline px-4 py-2.5">
@@ -124,6 +131,7 @@ export function MiniTable({ title, note, cols, rows, onCell, onAddRow, onDelRow,
                       value={r[c.key] ?? ""}
                       onChange={(e) => onCell(r.id, c.key, e.target.value)}
                       placeholder={c.money ? "0.00" : ""}
+                      inputMode={c.money ? "decimal" : undefined}
                     />
                   </td>
                 ))}
@@ -140,6 +148,53 @@ export function MiniTable({ title, note, cols, rows, onCell, onAddRow, onDelRow,
       <div className="flex items-center justify-between border-t border-hairline px-4 py-2">
         <button onClick={onAddRow} className="inline-flex items-center gap-1 text-xs font-medium text-content-secondary hover:text-content-primary">
           <Plus className="h-3.5 w-3.5" /> Add row
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wide text-content-muted">Total</span>
+          <span className="pgw-display text-sm font-bold text-content-primary">{money(total)}</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// MiniTable on a phone: a 3-4 column table of inputs does not fit at
+// 375px, so each row is a labelled two-column form with its own delete.
+function MiniTableStacked({ title, note, cols, rows, onCell, onAddRow, onDelRow, total }) {
+  return (
+    <Card className="overflow-hidden">
+      <div className="border-b border-hairline px-4 py-2.5">
+        <h4 className="pgw-display text-sm font-bold text-content-primary">{title}</h4>
+        {note && <p className="text-[11px] text-content-muted">{note}</p>}
+      </div>
+      {rows.map((r, i) => (
+        <div key={r.id} className="border-b border-hairline px-4 py-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-content-muted">Line {i + 1}</span>
+            <button onClick={() => onDelRow(r.id)} aria-label={`Remove line ${i + 1}`}
+              className="-mr-2 rounded p-2 text-content-muted hover:text-danger">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {cols.map((c) => (
+              <label key={c.key} className="block">
+                <span className="mb-0.5 block text-[10px] uppercase tracking-wide text-content-muted">{c.label}</span>
+                <input
+                  className={tblInput + (c.money ? " text-right" : "")}
+                  value={r[c.key] ?? ""}
+                  onChange={(e) => onCell(r.id, c.key, e.target.value)}
+                  placeholder={c.money ? "0.00" : ""}
+                  inputMode={c.money ? "decimal" : undefined}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+      <div className="flex items-center justify-between px-4 py-2">
+        <button onClick={onAddRow} className="inline-flex items-center gap-1 py-2 text-sm font-medium text-content-secondary hover:text-content-primary">
+          <Plus className="h-4 w-4" /> Add line
         </button>
         <div className="flex items-center gap-2">
           <span className="text-[11px] uppercase tracking-wide text-content-muted">Total</span>
