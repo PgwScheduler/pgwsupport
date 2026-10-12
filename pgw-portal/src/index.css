@@ -130,6 +130,19 @@ select:-webkit-autofill {
   caret-color: var(--text-primary);
 }
 
+/* iOS Safari zooms the whole page into any field whose text is under 16px
+   the moment it is focused, and does not zoom back out -- on a phone every
+   tap into the tic sheet or a shift form left the page magnified. 16px on
+   phones stops it. The month grid's tiny cells opt out with .pgw-cell: at
+   16px they would not fit, and that grid is the desktop layout anyway. */
+@media (max-width: 767px) {
+  .pgw-root input:not(.pgw-cell),
+  .pgw-root select,
+  .pgw-root textarea {
+    font-size: 16px;
+  }
+}
+
 /* Managers print these screens — force light so it's legible and toner-frugal.
    (The Excel/print-window exports generate their own light HTML separately.) */
 @media print {
