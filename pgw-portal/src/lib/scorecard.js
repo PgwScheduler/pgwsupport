@@ -150,7 +150,7 @@ export function buildScorecard(facts, ctx) {
   return {
     rows,
     total: totalRow(rows, "PGW Total"),
-    scTotal: sc.length && sc.length < rows.length ? totalRow(sc, "SC (Matt's region)") : null,
+    scTotal: sc.length && sc.length < rows.length ? totalRow(sc, "SC total") : null,
   };
 }
 
