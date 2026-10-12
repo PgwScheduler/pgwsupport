@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { X, Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { Card, Field, PrimaryBtn, GhostBtn, inputCls } from "../ui.jsx";
 import { fmtTime, fmtHours, shiftHours, toMinutes, overlaps } from "../../lib/scheduleMath.js";
@@ -24,6 +24,7 @@ export function DayDetailModal({ store, date, roster, shifts, celebrations = [],
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
+  const formRef = useRef(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const endAfterStart = toMinutes(form.end_time) > toMinutes(form.start_time);
@@ -48,6 +49,8 @@ export function DayDetailModal({ store, date, roster, shifts, celebrations = [],
       shift_type_id: s.shift_type_id ?? "",
     });
     setError(null);
+    // On a phone the form sits below a long shift list; bring it up.
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const cancelEdit = () => {
@@ -100,8 +103,8 @@ export function DayDetailModal({ store, date, roster, shifts, celebrations = [],
       : "Unassigned";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4" onClick={onClose}>
-      <Card className="max-h-[90vh] w-full max-w-lg overflow-auto p-5" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-scrim sm:items-center sm:p-4" onClick={onClose}>
+      <Card className="max-h-[92dvh] w-full max-w-lg overflow-auto rounded-b-none p-5 sm:max-h-[90vh] sm:rounded-b-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h3 className="pgw-display text-base font-bold text-content-primary">{prettyDate(date)}</h3>
@@ -109,7 +112,7 @@ export function DayDetailModal({ store, date, roster, shifts, celebrations = [],
               #{store.store_number} · {store.name}
             </p>
           </div>
-          <button onClick={onClose} className="rounded-md p-1 text-content-secondary hover:bg-surface-overlay hover:text-content-primary">
+          <button onClick={onClose} aria-label="Close" className="-mr-1 rounded-md p-2 text-content-secondary hover:bg-surface-overlay hover:text-content-primary">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -156,7 +159,7 @@ export function DayDetailModal({ store, date, roster, shifts, celebrations = [],
                 {!readOnly && <div className="flex items-center gap-1">
                   <button
                     onClick={() => startEdit(s)}
-                    className="rounded p-1.5 text-content-secondary hover:bg-surface-overlay hover:text-content-primary"
+                    className="rounded p-2.5 text-content-secondary hover:bg-surface-overlay hover:text-content-primary md:p-1.5"
                     title="Edit shift"
                   >
                     <Pencil className="h-4 w-4" />
@@ -164,7 +167,7 @@ export function DayDetailModal({ store, date, roster, shifts, celebrations = [],
                   <button
                     onClick={() => remove(s.id)}
                     disabled={busy}
-                    className="rounded p-1.5 text-content-secondary hover:bg-surface-overlay hover:text-danger disabled:text-content-disabled disabled:cursor-not-allowed"
+                    className="rounded p-2.5 text-content-secondary hover:bg-surface-overlay hover:text-danger md:p-1.5 disabled:text-content-disabled disabled:cursor-not-allowed"
                     title="Delete shift"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -177,7 +180,7 @@ export function DayDetailModal({ store, date, roster, shifts, celebrations = [],
 
         {/* Office (migration 78) reads the schedule; it never changes it. */}
         {!readOnly && (
-        <form onSubmit={submit} className="space-y-3 border-t border-hairline pt-4">
+        <form ref={formRef} onSubmit={submit} className="scroll-mt-4 space-y-3 border-t border-hairline pt-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-content-secondary">
             {editingId ? "Edit shift" : "Add shift"}
           </p>

@@ -7,6 +7,8 @@ import { CelebrationLine } from "./Celebrations.jsx";
 import { shiftColorVar } from "../../lib/shiftTypes.js";
 import { DayDetailModal } from "./DayDetailModal.jsx";
 import { DuplicateMonthModal } from "./DuplicateMonthModal.jsx";
+import { ScheduleAgenda, WeekHoursDetail } from "./ScheduleAgenda.jsx";
+import { useIsPhone } from "../../hooks/useMediaQuery.js";
 import { useAuth } from "../../context/AuthProvider.jsx";
 import { useCompanyCelebrations } from "../../hooks/useCompanyCelebrations.js";
 import { isHomeOffice } from "../../lib/homeOffice.js";
@@ -24,6 +26,7 @@ export function ScheduleView({ store }) {
   const [openDay, setOpenDay] = useState(null);
   const [expandedWeek, setExpandedWeek] = useState(null);
   const [dupOpen, setDupOpen] = useState(false);
+  const isPhone = useIsPhone();
 
   const {
     grid, byDate, roster, loading, error, addShift, updateShift, deleteShift,
@@ -93,19 +96,21 @@ export function ScheduleView({ store }) {
         title="Employee Schedule"
         subtitle={`#${store.store_number} · ${store.name}`}
         action={
-          <div className="flex items-center gap-2">
-            <GhostBtn onClick={() => shiftMonth(-1)} aria-label="Previous month">
-              <ChevronLeft className="h-4 w-4" />
-            </GhostBtn>
-            <input
-              type="month"
-              value={monthInputValue}
-              onChange={onPickMonth}
-              className="rounded-md border border-hairline-strong bg-surface-overlay px-2 py-1.5 text-sm text-content-primary outline-none focus:border-hairline-strong"
-            />
-            <GhostBtn onClick={() => shiftMonth(1)} aria-label="Next month">
-              <ChevronRight className="h-4 w-4" />
-            </GhostBtn>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <GhostBtn onClick={() => shiftMonth(-1)} aria-label="Previous month">
+                <ChevronLeft className="h-4 w-4" />
+              </GhostBtn>
+              <input
+                type="month"
+                value={monthInputValue}
+                onChange={onPickMonth}
+                className="rounded-md border border-hairline-strong bg-surface-overlay px-2 py-1.5 text-sm text-content-primary outline-none focus:border-hairline-strong"
+              />
+              <GhostBtn onClick={() => shiftMonth(1)} aria-label="Next month">
+                <ChevronRight className="h-4 w-4" />
+              </GhostBtn>
+            </div>
             {!readOnly && <GhostBtn onClick={() => setDupOpen(true)}>
               <Copy className="mr-1 inline h-3.5 w-3.5" />Duplicate month
             </GhostBtn>}
@@ -148,6 +153,21 @@ export function ScheduleView({ store }) {
         </div>
       )}
 
+      {isPhone ? (
+        <ScheduleAgenda
+          grid={grid}
+          byDate={byDate}
+          typesById={typesById}
+          month={month}
+          today={today}
+          celebrations={celebrations}
+          maxCelebrations={showAll ? MAX_CELEBRATIONS_ALL : undefined}
+          readOnly={readOnly}
+          expandedWeek={expandedWeek}
+          setExpandedWeek={setExpandedWeek}
+          onOpenDay={setOpenDay}
+        />
+      ) : (
       <Card className="overflow-hidden">
         <div className="grid grid-cols-8 border-b border-hairline bg-surface-overlay text-[11px] font-semibold uppercase tracking-wide text-content-secondary">
           {WEEKDAYS.map((d) => (
@@ -256,34 +276,14 @@ export function ScheduleView({ store }) {
                 </button>
 
                 {expanded && (
-                  <div className="col-span-8 border-b border-hairline bg-surface-overlay px-4 py-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-content-secondary">
-                      Week of{" "}
-                      {new Date(week[0] + "T00:00:00").toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })}{" "}
-                      — per employee
-                    </p>
-                    {summary.employees.length === 0 ? (
-                      <p className="text-sm text-content-muted">No shifts scheduled this week.</p>
-                    ) : (
-                      <div className="grid gap-x-8 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
-                        {summary.employees.map((e) => (
-                          <div key={e.id} className="flex items-center justify-between gap-3 text-sm">
-                            <span className="truncate text-content-primary">{e.name}</span>
-                            <span className="flex-shrink-0 font-medium text-content-secondary">{fmtHours(e.hours)} h</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <WeekHoursDetail week={week} summary={summary} className="col-span-8 border-b border-hairline" />
                 )}
               </React.Fragment>
             );
           })}
         </div>
       </Card>
+      )}
 
       {loading && <p className="mt-3 text-sm text-content-muted">Loading…</p>}
 

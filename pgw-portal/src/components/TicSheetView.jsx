@@ -9,6 +9,9 @@ import { HorizonSendModal, LastUploadLine, ResendBanner } from "./HorizonSendMod
 import { SectionHeader, Card, PrimaryBtn, GhostBtn, Empty, inputCls, T } from "./ui.jsx";
 import { money, moneyCell, pct, numOrDash } from "../lib/format.js";
 import { computeTicSheet, daySales, dayPotential } from "../lib/ticSheetMath.js";
+import { SUMMARY_COLS, num, numToStr, toNum } from "../lib/ticSheetFields.js";
+import { useIsPhone } from "../hooks/useMediaQuery.js";
+import { TicDayEntry } from "./tic/TicDayEntry.jsx";
 
 // --- date helpers (timezone-naive local dates; never UTC) -------------------
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -35,34 +38,21 @@ function buildDayMeta(year, month, holidaySet, todayIso) {
   return meta;
 }
 
-const num = (v) => Number(v) || 0;
-const numToStr = (n) => (n == null || Number(n) === 0 ? "" : String(n));
 // Counts render whole where they are whole; paced/goal figures carry one
 // decimal, and a negative New Goal keeps its minus sign (it means "ahead").
 const fmtCount = (v) =>
   v == null || !Number.isFinite(v) ? "" : Number.isInteger(v) ? String(v) : v.toFixed(1);
-function toNum(raw, kind) {
-  const n = Number(raw);
-  if (raw === "" || raw == null || !Number.isFinite(n)) return 0;
-  const v = kind === "int" ? Math.trunc(n) : n;
-  return v < 0 ? 0 : v;
-}
 
-// Day-summary columns, to the right of the service categories.
-// zero_dollar_tickets took First Time Customers' slot (migration 25). It is a
-// daily entry with no Horizon field, and it does NOT reduce ro_count — repair
-// orders, capture rate and average estimate per car are untouched by it.
-const SUMMARY_COLS = [
-  { key: "ro_count", label: "Repair Orders", kind: "int", type: "edit" },
-  { key: "zero_dollar_tickets", label: "Zero Dollar Tickets", kind: "int", type: "edit" },
-  { key: "sales", label: "Sales", kind: "money", type: "sales" },
-  { key: "declined_sales", label: "Declined Sales", kind: "money", type: "edit" },
-  { key: "credit_apps", label: "CC Apps", kind: "int", type: "edit" },
-  { key: "credit_dollars", label: "Credit $", kind: "money", type: "edit" },
-  { key: "total_potential", label: "Total Potential", kind: "money", type: "calc" },
-  { key: "ave_estimate", label: "Ave Estimate / Car", kind: "money", type: "calc" },
-  { key: "capture_rate", label: "Sales Capture Rate", kind: "pct", type: "calc" },
-];
+// The day the one-day form opens on: today, in the current month; the last
+// day of a past month. Sunday (always closed) steps back to Saturday.
+function defaultEntryDay(year, month, todayIso) {
+  const last = new Date(year, month, 0).getDate();
+  const ym = `${year}-${pad2(month)}`;
+  let d = todayIso.startsWith(ym) ? Number(todayIso.slice(8, 10)) : last;
+  if (d > 1 && new Date(year, month - 1, d).getDay() === 0) d -= 1;
+  return `${ym}-${pad2(d)}`;
+}
+const isoOf = (dt) => `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
 
 // Per-day Sales breakdown panel. `role` marks revenue vs cost so the panel can
 // show both a Sales total and Gross profit.
@@ -196,8 +186,8 @@ function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments: canAdj
       : "";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4" onClick={onClose}>
-      <Card className="w-full max-w-lg p-5" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-scrim sm:items-center sm:p-4" onClick={onClose}>
+      <Card className="max-h-[92dvh] w-full max-w-lg overflow-auto rounded-b-none p-5 sm:max-h-[90vh] sm:rounded-b-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="pgw-display text-base font-bold text-content-primary">Sales breakdown · {label}</h3>
           <button onClick={onClose} className="text-content-muted hover:text-content-primary"><X className="h-4 w-4" /></button>
@@ -255,7 +245,7 @@ function SalesDetailModal({ dateIso, row, laborSales, canEditAdjustments: canAdj
           </div>
         </div>
         <p className="mt-2 text-[11px] text-content-muted">
-          Gross profit here is before technician labor cost; the goals strip above the grid shows the full figure.
+          Gross profit here is before technician labor cost; the goals strip shows the full figure.
         </p>
         {saveError && <p className="mt-3 text-sm text-danger">{saveError}</p>}
         <div className="mt-5 flex justify-end gap-2">
@@ -275,6 +265,12 @@ export function TicSheetView({ store }) {
   const readOnly = isOfficeRole(role);
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1-based
+  // Phones open on the one-day form; the month grid is still a tap away
+  // (and a desktop can switch to the form too).
+  const isPhone = useIsPhone();
+  const [layoutPick, setLayoutPick] = useState(null);
+  const layout = layoutPick ?? (isPhone ? "day" : "grid");
+  const [entryPick, setEntryPick] = useState(null);
 
   const sheet = useMonthlyTicSheet(store, year, month);
   const { categories, holidaySet, loading, error, kpiByDate, unitsByDate, laborSalesByDate,
@@ -305,6 +301,24 @@ export function TicSheetView({ store }) {
   const onPickMonth = (e) => {
     const [y, m] = e.target.value.split("-").map(Number);
     if (y && m && y * 12 + (m - 1) <= curYm) { setYear(y); setMonth(m); }
+  };
+
+  // The form's day: the one picked, while it is in the month on screen.
+  const entryDay = entryPick?.startsWith(monthYm) ? entryPick : defaultEntryDay(year, month, today);
+  // Previous/next open day. Sundays are always closed, so they are skipped;
+  // a holiday still shows (marked closed) since stores differ on them.
+  const neighbourDay = (delta) => {
+    const [y, m, d] = entryDay.split("-").map(Number);
+    let dt = new Date(y, m - 1, d + delta);
+    if (dt.getDay() === 0) dt = new Date(y, m - 1, d + 2 * delta);
+    const iso = isoOf(dt);
+    return iso > today ? null : { iso, y: dt.getFullYear(), m: dt.getMonth() + 1 };
+  };
+  const stepDay = (delta) => {
+    const next = neighbourDay(delta);
+    if (!next) return;
+    if (next.y !== year || next.m !== month) { setYear(next.y); setMonth(next.m); }
+    setEntryPick(next.iso);
   };
 
   const scheduleGoals = () => {
@@ -363,8 +377,8 @@ export function TicSheetView({ store }) {
     setCellError(err ? err.message : null);
   };
 
-  const cellInput = "h-7 w-full bg-transparent text-center text-xs text-content-primary outline-none focus:bg-surface-overlay [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
-  const bandInput = "h-6 w-full bg-transparent text-center text-[11px] text-content-primary outline-none focus:bg-surface-overlay [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+  const cellInput = "pgw-cell h-7 w-full bg-transparent text-center text-xs text-content-primary outline-none focus:bg-surface-overlay [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+  const bandInput = "pgw-cell h-6 w-full bg-transparent text-center text-[11px] text-content-primary outline-none focus:bg-surface-overlay [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
   const th = "border-b border-r border-hairline";
   const td = "border-b border-r border-hairline";
 
@@ -417,7 +431,7 @@ export function TicSheetView({ store }) {
         title="Daily Tic Sheet"
         subtitle={store.store_number ? `#${store.store_number} · ${store.name}` : store.name}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {horizon.canUse && (needsResend ? (
               <button onClick={() => setShowHorizon(true)} title="Adjustments changed after this month was sent"
                 className="mr-2 inline-flex items-center gap-1.5 rounded-md border border-warning-border bg-warning-tint px-3.5 py-2 text-sm font-semibold text-warning hover:brightness-125 focus:outline-none">
@@ -428,11 +442,13 @@ export function TicSheetView({ store }) {
                 <Send className="h-4 w-4" /> Send to Horizon
               </PrimaryBtn>
             ))}
-            <GhostBtn onClick={() => shiftMonth(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></GhostBtn>
-            <input type="month" value={`${year}-${pad2(month)}`} max={`${now.getFullYear()}-${pad2(now.getMonth() + 1)}`}
-              onChange={onPickMonth}
-              className="rounded-md border border-hairline-strong bg-surface-overlay px-2 py-1.5 text-sm text-content-primary outline-none" />
-            <GhostBtn onClick={() => shiftMonth(1)} disabled={atCurrentMonth} aria-label="Next month"><ChevronRight className="h-4 w-4" /></GhostBtn>
+            <div className="flex items-center gap-2">
+              <GhostBtn onClick={() => shiftMonth(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></GhostBtn>
+              <input type="month" value={`${year}-${pad2(month)}`} max={`${now.getFullYear()}-${pad2(now.getMonth() + 1)}`}
+                onChange={onPickMonth}
+                className="rounded-md border border-hairline-strong bg-surface-overlay px-2 py-1.5 text-sm text-content-primary outline-none" />
+              <GhostBtn onClick={() => shiftMonth(1)} disabled={atCurrentMonth} aria-label="Next month"><ChevronRight className="h-4 w-4" /></GhostBtn>
+            </div>
           </div>
         }
       />
@@ -446,13 +462,44 @@ export function TicSheetView({ store }) {
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
       {cellError && <p className="mb-3 text-sm text-danger">{cellError}</p>}
 
-      <GoalsStrip goals={goals} year={year} month={month} />
+      <div className="mb-3 inline-flex rounded-md border border-hairline-strong bg-surface-overlay p-0.5 text-sm" role="group" aria-label="Layout">
+        {[["day", "One day"], ["grid", "Whole month"]].map(([k, label]) => (
+          <button key={k} onClick={() => setLayoutPick(k)} aria-pressed={layout === k}
+            className={"rounded px-3 py-1.5 font-medium " + (layout === k ? "bg-surface-raised text-content-primary" : "text-content-secondary hover:text-content-primary")}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {layout === "grid" && <GoalsStrip goals={goals} year={year} month={month} />}
 
       {categories.length === 0 ? (
         <Empty title="No service categories for this store"
           hint={store.brand === "speedee" ? "SpeeDee categories are set up per the SpeeDee list." : "No active categories are configured for this brand."} />
       ) : loading ? (
         <Card className="p-8"><p className="text-sm text-content-muted">Loading {monthLabel(year, month)}…</p></Card>
+      ) : layout === "day" ? (
+        <>
+          <TicDayEntry
+            key={`${store.id}-${entryDay}`}
+            day={dayMeta[entryDay]}
+            categories={categories}
+            row={kpiByDate[entryDay]}
+            units={unitsByDate[entryDay]}
+            laborSales={laborSalesByDate[entryDay]}
+            monthUnits={sheetTotals.month.units}
+            monthlyGoal={sheetTotals.monthlyGoal}
+            readOnly={readOnly}
+            canGoBack={!!neighbourDay(-1)}
+            canGoForward={!!neighbourDay(1)}
+            onStep={stepDay}
+            saveSummary={saveSummary}
+            saveUnit={saveUnit}
+            onSaved={(err) => { if (err) setCellError(err.message); else { setCellError(null); scheduleGoals(); } }}
+            onOpenSales={() => setDetailDate(entryDay)}
+          />
+          <div className="mt-4"><GoalsStrip goals={goals} year={year} month={month} /></div>
+        </>
       ) : (
         <Card className="overflow-hidden p-0">
           <div className="text-xs text-content-muted px-3 py-2 border-b border-hairline">

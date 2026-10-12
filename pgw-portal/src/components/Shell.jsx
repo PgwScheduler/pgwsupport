@@ -122,7 +122,7 @@ export function Shell({ view, setView, children }) {
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface-card px-5 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface-card px-3 py-3 md:px-5">
           {/* The sidebar is hidden below md, which left phones with no way
               to change screens at all. Added with the Directory, whose
               tel:/mailto: links are the part most used from a phone. */}
@@ -163,7 +163,7 @@ export function Shell({ view, setView, children }) {
         {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
 
         {currentStore && (
-          <div className="flex items-center gap-1.5 border-b border-hairline bg-surface-card px-5 py-2 text-xs text-content-muted">
+          <div className="flex items-center gap-1.5 border-b border-hairline bg-surface-card px-3 py-2 text-xs text-content-muted md:px-5">
             <Building2 className="h-3.5 w-3.5" />
             {!currentStore.is_home_office && (
               <>
@@ -182,7 +182,7 @@ export function Shell({ view, setView, children }) {
         {/* Unread announcements, above every screen (migration 86). */}
         <AnnouncementBanner onShowAll={() => setView("announcements")} />
 
-        <main className="flex-1 overflow-auto p-5">{children}</main>
+        <main className="flex-1 overflow-auto p-3 md:p-5">{children}</main>
       </div>
     </div>
   );
