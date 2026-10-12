@@ -239,7 +239,7 @@ eq("district can build", canBuildReports("district"), true);
 eq("regional can build", canBuildReports("regional"), true);
 eq("admin can build", canBuildReports("admin"), true);
 eq("master can build", canBuildReports("master"), true);
-eq("store cannot, by default", canBuildReports("store"), false);
+eq("store can build (migration 89: compare every store)", canBuildReports("store"), true);
 eq("no role cannot", canBuildReports(null), false);
 
 console.log(`\n${pass} passed, ${fail} failed`);

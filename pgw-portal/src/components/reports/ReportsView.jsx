@@ -62,11 +62,13 @@ function Notice({ tone = "info", icon: Icon = Info, children }) {
 // that replace Task 10's), his monthly Who Sold What (migration 70), Tech
 // Ranks (migration 74, district and above only -- tech_ranks() refuses a
 // store login), and the generic Report Builder, unchanged.
+// A store login gets the Report Builder only (migration 89, user's call).
 export function ReportsView() {
-  const [area, setArea] = useState("daily");
   const { role } = useAuth();
-  const tabs = [["daily", "Daily Reports"], ["wsw", "Who Sold What"],
-    ...(role === "store" ? [] : [["ranks", "Tech Ranks"]]), ["builder", "Report Builder"]];
+  const storeLogin = role === "store";
+  const [area, setArea] = useState(storeLogin ? "builder" : "daily");
+  const tabs = storeLogin ? [["builder", "Report Builder"]]
+    : [["daily", "Daily Reports"], ["wsw", "Who Sold What"], ["ranks", "Tech Ranks"], ["builder", "Report Builder"]];
   return (
     <div className="space-y-4">
       <SectionHeader
@@ -76,14 +78,14 @@ export function ReportsView() {
           : area === "ranks" ? "Tech Ranks: each division's top 10 and the company top 20 by hours turned."
           : "Build any report from portal data."}
       />
-      <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-hairline [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {tabs.length > 1 && <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-hairline [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map(([k, label]) => (
           <button key={k} role="tab" aria-selected={area === k} onClick={() => setArea(k)}
             className={"shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium " + (area === k ? "border-accent text-content-primary" : "border-transparent text-content-secondary hover:text-content-primary")}>
             {label}
           </button>
         ))}
-      </div>
+      </div>}
       {area === "daily" ? <ScorecardView /> : area === "wsw" ? <WhoSoldWhatView />
         : area === "ranks" ? <TechRanksView /> : <ReportBuilder />}
     </div>
@@ -177,7 +179,9 @@ function ReportBuilder() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Panel title="Stores" hint="Only the stores your access covers appear here.">
+        <Panel title="Stores" hint={role === "store"
+          ? "Every store, so you can compare. Cash drawer measures are for your own store only."
+          : "Only the stores your access covers appear here."}>
           <StoreMultiSelect stores={b.stores} selected={b.selectedStoreIds} onChange={b.setSelectedStoreIds} />
         </Panel>
 

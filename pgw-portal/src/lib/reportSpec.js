@@ -22,16 +22,15 @@ import { CURRENCY_FMT, HOURS_FMT, PERCENT_FMT, QTY_FMT } from "./excelFormats.js
 // ---------------------------------------------------------------------
 // WHO GETS THE BUILDER
 //
-// Task 10, Part 1 names district, regional, admin and master. It also
-// observes that scoping a store user to their own store is free, and
-// asks that this be FLAGGED for BDC rather than assumed — so it is a
-// flag, off, and turning it on is this one line. Nothing else in the
-// builder or the query changes: report_build() has always scoped by
-// can_access_location(), which already resolves a store user to their
-// own store, so the switch grants no reach that the database would not
-// have granted anyway.
+// Task 10, Part 1 named district, regional, admin and master. Store
+// managers were added 2026-10-12 (migration 89) so they can compare
+// their numbers with every other store: inside report_build() a store
+// login reaches every real store, by name. They get the Report Builder
+// tab only (ReportsView), never the pay breakdown, and cash drawer
+// tenders for their own store only -- all enforced in report_build(),
+// not here.
 // ---------------------------------------------------------------------
-export const STORE_USERS_MAY_BUILD_REPORTS = false;
+export const STORE_USERS_MAY_BUILD_REPORTS = true;
 
 // "office" (migration 78): read-only, every store. report_build() still
 // refuses it the pay-breakdown measures, as for everyone below admin.
