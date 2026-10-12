@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Wrench, Lock, AlertTriangle } from "lucide-react";
-import { Card, SectionHeader, GhostBtn, PrimaryBtn, Empty, Field, inputCls } from "./ui.jsx";
+import { Card, SectionHeader, GhostBtn, PrimaryBtn, Empty, Field, LayoutToggle, inputCls } from "./ui.jsx";
 import { money, pct, numOrDash } from "../lib/format.js";
 import { useTechTracker } from "../hooks/useTechTracker.js";
 import { useHorizonSlots } from "../hooks/useHorizonSlots.js";
@@ -9,6 +9,9 @@ import { useDateRange } from "../context/DateRangeProvider.jsx";
 import { DateRangeControl } from "./DateRangeControl.jsx";
 import { rangeLabel } from "../lib/dateRange.js";
 import { EmployeeProfilePanel } from "./payroll/EmployeeProfilePanel.jsx";
+import { TechDayEntry } from "./tech/TechDayEntry.jsx";
+import { useIsPhone } from "../hooks/useMediaQuery.js";
+import { todayStr } from "../lib/scheduleMath.js";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
@@ -26,6 +29,11 @@ export function TechTrackerView({ store }) {
   const { from, to } = useDateRange();
   const [selIdx, setSelIdx] = useState(1);
   const [profileId, setProfileId] = useState(null);
+  // Phones open on every tech for one day; the per-tech grid is a tap away.
+  const isPhone = useIsPhone();
+  const [layoutPick, setLayoutPick] = useState(null);
+  const layout = layoutPick ?? (isPhone ? "day" : "tech");
+  const [dayPick, setDayPick] = useState(null);
 
   const tt = useTechTracker(store.id, from, to);
   const { privileged, loading, error, slotViews, storeSummary, employees, unattributed, isMonth } = tt;
@@ -43,6 +51,11 @@ export function TechTrackerView({ store }) {
   const selView = slotByIndex[selIdx] || null;
   const slotName = (sv, idx) =>
     sv?.slot?.employee?.full_name || sv?.slot?.label || `Slot ${idx}`;
+  // The one-day form's date: the one picked while it is inside the range,
+  // else today (or the range's last day when today is outside it).
+  const today = todayStr();
+  const entryDay = dayPick && dayPick >= from && dayPick <= to ? dayPick
+    : today >= from && today <= to ? today : to;
 
   return (
     <div>
@@ -62,6 +75,16 @@ export function TechTrackerView({ store }) {
 
       <HorizonHeldSlotsNotice horizon={horizon} />
 
+      <LayoutToggle className="mb-3" options={[["day", "One day"], ["tech", "Per tech"]]} value={layout} onChange={setLayoutPick} />
+
+      {layout === "day" ? (
+        loading ? (
+          <Card className="mb-5 p-8"><p className="text-sm text-content-muted">Loading {rangeLabel(from, to)}…</p></Card>
+        ) : (
+          <TechDayEntry slotViews={slotViews} slotName={slotName} from={from} to={to}
+            day={entryDay} onPickDay={setDayPick} saveDaily={tt.saveDaily} />
+        )
+      ) : (<>
       {/* Slot selector */}
       <div className="mb-3 flex flex-wrap gap-1.5">
         {Array.from({ length: slotCount }, (_, i) => i + 1).map((idx) => {
@@ -102,6 +125,7 @@ export function TechTrackerView({ store }) {
           )}
         </>
       )}
+      </>)}
 
       <StoreTechSummary slotViews={slotViews} privileged={privileged} slotName={slotName} />
 
@@ -194,8 +218,8 @@ function TechGrid({ view, privileged, from, to, isMonth, tt }) {
       <table ref={gridRef} className="w-full border-collapse">
         <thead>
           <tr className="bg-surface-overlay">
-            <th className={th + " text-left"}>Work Day&nbsp;#</th>
-            <th className={th + " text-left"}>Day</th>
+            <th className={th.replace("text-right", "text-left")}>Work Day&nbsp;#</th>
+            <th className={th.replace("text-right", "text-left")}>Day</th>
             <th className={th}>Hrs Worked</th>
             <th className={th}>Flag Hours</th>
             <th className={th}>Labor Sales</th>
@@ -212,8 +236,8 @@ function TechGrid({ view, privileged, from, to, isMonth, tt }) {
               const dow = DOW[new Date(d.iso + "T00:00:00").getDay()];
               return (
                 <tr key={d.iso} className="hover:bg-surface-overlay/40">
-                  <td className={td + " text-left text-content-muted"}>{d.iso.slice(5)}</td>
-                  <td className={td + " text-left text-content-muted"}>{dow}</td>
+                  <td className={td.replace("text-right", "text-left") + " text-content-muted"}>{d.iso.slice(5)}</td>
+                  <td className={td.replace("text-right", "text-left") + " text-content-muted"}>{dow}</td>
                   <td className={td + " p-0"}>{editable(d.iso, "hours_worked", d.hours)}</td>
                   <td className={td + " p-0"}>{editable(d.iso, "flag_hours", d.flag)}</td>
                   <td className={td + " p-0"}>{editable(d.iso, "labor_sales", d.labor)}</td>
@@ -254,8 +278,8 @@ function TechGrid({ view, privileged, from, to, isMonth, tt }) {
               // week's overtime, so removing it would misrepresent the row.
               return (
                 <tr key={d.iso} className={"hover:bg-surface-overlay/40 " + (d.inRange ? "" : "opacity-45")}>
-                  <td className={td + " text-left text-content-muted"}>{d.inRange ? dayOfMonth(d.iso) : ""}</td>
-                  <td className={td + " text-left text-content-muted"}>{dow}</td>
+                  <td className={td.replace("text-right", "text-left") + " text-content-muted"}>{d.inRange ? dayOfMonth(d.iso) : ""}</td>
+                  <td className={td.replace("text-right", "text-left") + " text-content-muted"}>{dow}</td>
                   <td className={td + " p-0"}>{editable(d.iso, "hours_worked", d.hours)}</td>
                   <td className={td + " p-0"}>{editable(d.iso, "flag_hours", d.flag)}</td>
                   <td className={td + " p-0"}>{editable(d.iso, "labor_sales", d.labor)}</td>
@@ -272,7 +296,7 @@ function TechGrid({ view, privileged, from, to, isMonth, tt }) {
             {/* Weekly totals — always the WHOLE week, which is why a
                 clipped week says so rather than reading as the range's. */}
             <tr className="bg-surface-overlay font-semibold">
-              <td className={td + " text-left"} colSpan={2}>
+              <td className={td.replace("text-right", "text-left")} colSpan={2}>
                 Week {wi + 1} total
                 {wk.partial && <span className="ml-1 font-normal text-content-muted">(whole week)</span>}
               </td>
@@ -292,7 +316,7 @@ function TechGrid({ view, privileged, from, to, isMonth, tt }) {
         {payCols && m && (
           <tfoot>
             <tr className="bg-surface-inverse/10 font-bold">
-              <td className={td + " text-left"} colSpan={2}>
+              <td className={td.replace("text-right", "text-left")} colSpan={2}>
                 {isMonth ? "Month totals" : "Range totals"}
                 {view.anyPartial && (
                   <span className="ml-1 font-normal text-content-muted">· whole weeks, so edge weeks reach past the range</span>
@@ -312,7 +336,7 @@ function TechGrid({ view, privileged, from, to, isMonth, tt }) {
         {!payCols && (
           <tfoot>
             <tr className="bg-surface-inverse/10 font-bold">
-              <td className={td + " text-left"} colSpan={2}>{isMonth ? "Month totals" : "Range totals"}</td>
+              <td className={td.replace("text-right", "text-left")} colSpan={2}>{isMonth ? "Month totals" : "Range totals"}</td>
               <td className={td}>{numOrDash(view.store.hours)}</td>
               <td className={td}>{numOrDash(view.store.flag)}</td>
               <td className={td}>{money(view.store.labor)}</td>
@@ -353,7 +377,7 @@ function StoreTechSummary({ slotViews, privileged, slotName }) {
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-surface-overlay">
-            <th className={th + " text-left"}>Technician</th>
+            <th className={th.replace("text-right", "text-left")}>Technician</th>
             <th className={th}>Proficiency</th>
             <th className={th}>ELR</th>
             {privileged && <><th className={th}>Labor GP %</th><th className={th}>Cost / Hour</th></>}
@@ -365,7 +389,7 @@ function StoreTechSummary({ slotViews, privileged, slotName }) {
             const hasData = st.hours || st.flag || st.labor;
             return (
               <tr key={sv.slot.id} className="hover:bg-surface-overlay/40">
-                <td className={td + " text-left text-content-primary"}>{slotName(sv, sv.slot.slot_index)}</td>
+                <td className={td.replace("text-right", "text-left") + " text-content-primary"}>{slotName(sv, sv.slot.slot_index)}</td>
                 <td className={td}>{hasData ? pct(st.proficiency) : "—"}</td>
                 <td className={td}>{st.elr ? money(st.elr) : "—"}</td>
                 {privileged && <>
