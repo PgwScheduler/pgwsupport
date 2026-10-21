@@ -11,6 +11,7 @@ import { MeasurePicker } from "./MeasurePicker.jsx";
 import { PriorYearImportModal } from "./PriorYearImportModal.jsx";
 import { ScorecardView } from "./ScorecardView.jsx";
 import { WhoSoldWhatView } from "./WhoSoldWhatView.jsx";
+import { GpBudgetView } from "./GpBudgetView.jsx";
 import { TechRanksView } from "./TechRanksView.jsx";
 import {
   GROUP_BY, formatCell, groupByLabel, hasAttributedPay, hasRepeatedMonthly,
@@ -58,8 +59,9 @@ function Notice({ tone = "info", icon: Icon = Info, children }) {
   );
 }
 
-// Four tabs: Matt's daily reports (Reports 1, 2, 5 and the five presets
-// that replace Task 10's), his monthly Who Sold What (migration 70), Tech
+// Five tabs: Matt's daily reports (Reports 1, 2, 5 and the five presets
+// that replace Task 10's), John's GP vs Budget (no migration), his monthly
+// Who Sold What (migration 70), Tech
 // Ranks (migration 74, district and above only -- tech_ranks() refuses a
 // store login), and the generic Report Builder, unchanged.
 // A store login gets the Report Builder only (migration 89, user's call).
@@ -68,12 +70,13 @@ export function ReportsView() {
   const storeLogin = role === "store";
   const [area, setArea] = useState(storeLogin ? "builder" : "daily");
   const tabs = storeLogin ? [["builder", "Report Builder"]]
-    : [["daily", "Daily Reports"], ["wsw", "Who Sold What"], ["ranks", "Tech Ranks"], ["builder", "Report Builder"]];
+    : [["daily", "Daily Reports"], ["gpb", "GP vs Budget"], ["wsw", "Who Sold What"], ["ranks", "Tech Ranks"], ["builder", "Report Builder"]];
   return (
     <div className="space-y-4">
       <SectionHeader
         title="Reports"
         subtitle={area === "daily" ? null
+          : area === "gpb" ? "GP vs Budget: year-to-date gross profit against the full-year budget, at the current pace."
           : area === "wsw" ? "Who Sold What: services sold as a % of cars, by store, month over month."
           : area === "ranks" ? "Tech Ranks: each division's top 10 and the company top 20 by hours turned."
           : "Build any report from portal data."}
@@ -86,7 +89,7 @@ export function ReportsView() {
           </button>
         ))}
       </div>}
-      {area === "daily" ? <ScorecardView /> : area === "wsw" ? <WhoSoldWhatView />
+      {area === "daily" ? <ScorecardView /> : area === "gpb" ? <GpBudgetView /> : area === "wsw" ? <WhoSoldWhatView />
         : area === "ranks" ? <TechRanksView /> : <ReportBuilder />}
     </div>
   );
