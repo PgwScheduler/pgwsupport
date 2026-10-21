@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   LogOut, LayoutDashboard, GraduationCap, Banknote, Clock, CalendarDays, FileText,
   ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound, ClipboardList, Wrench, Trophy, BarChart3, BookUser, History, Megaphone,
+  PackageSearch,
 } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { canBuildReports } from "../lib/reportSpec.js";
@@ -22,6 +23,9 @@ const NAV = [
   { key: "tic", label: "Daily Tic Sheet", icon: ClipboardList },
   { key: "techtracker", label: "Tech Tracker", icon: Wrench },
   { key: "bonus", label: "Bonus Tracker", icon: Trophy },
+  // Every role (migration 90); scoped in SQL, and a store sees a month
+  // only once AP releases it.
+  { key: "partsrecon", label: "Parts Recon", icon: PackageSearch },
   { key: "hours", label: "Payroll", icon: Clock },
   { key: "schedule", label: "Employee Schedule", icon: CalendarDays },
   { key: "documents", label: "Documents", icon: FileText },
