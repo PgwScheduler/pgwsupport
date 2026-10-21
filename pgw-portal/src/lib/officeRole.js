@@ -19,7 +19,9 @@ export const isOfficeRole = (role) => role === "office";
 // (read-only; names come from schedule_people(), never the employee record).
 // Announcements (migration 86): office reads AND posts them -- the one
 // place an office login writes.
-export const OFFICE_VIEWS = new Set(["dashboard", "announcements", "drawer", "tic", "schedule", "reports", "training", "directory"]);
+// Parts Recon (migration 90): read-only for office, unless master/admin
+// put the login on the AP team.
+export const OFFICE_VIEWS = new Set(["dashboard", "announcements", "drawer", "tic", "schedule", "reports", "training", "directory", "partsrecon"]);
 
 // Where an office login lands, and falls back to from a hidden screen.
 export const OFFICE_DEFAULT_VIEW = "dashboard";

@@ -25,6 +25,7 @@ import { AuditLogView } from "./components/audit/AuditLogView.jsx";
 import { canSeeAuditLog } from "./lib/auditLog.js";
 import { AnnouncementsProvider } from "./hooks/useAnnouncements.js";
 import { AnnouncementsView } from "./components/announcements/AnnouncementsView.jsx";
+import { PartsReconView } from "./components/partsrecon/PartsReconView.jsx";
 
 function FullScreenMessage({ children }) {
   return (
@@ -117,6 +118,8 @@ export default function App() {
       {view === "training" && <TrainingView />}
       {/* Company-wide feed scoped in SQL (migration 86), not keyed to currentStore. */}
       {view === "announcements" && <AnnouncementsView />}
+      {/* Scoped in SQL (migration 90) with its own store filter -- not keyed to currentStore. */}
+      {view === "partsrecon" && <PartsReconView />}
       {/* Company-wide for every role, so not keyed to currentStore. */}
       {view === "directory" && <DirectoryView />}
       {/* Within the caller's scope, with its own store filter -- not keyed
