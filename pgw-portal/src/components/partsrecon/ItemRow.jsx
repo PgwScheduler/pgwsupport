@@ -187,6 +187,9 @@ export function ItemRow({ item, month, isAp, monthClosed, showStore, onChanged }
             </span>
             {item.kind !== "divvy" && item.invoices && <span className="font-mono text-xs text-content-muted">inv {item.invoices}</span>}
             {item.kind === "divvy" && item.txn_date && <span className="text-xs text-content-muted">{fmtDate(item.txn_date)}</span>}
+            {item.kind === "divvy" && item.detail?.note && (
+              <span className="max-w-xs truncate text-xs text-content-muted" title={item.detail.note}>Note: {item.detail.note}</span>
+            )}
             <StatusPill status={item.status} />
           </div>
           <p className="mt-0.5 line-clamp-2 text-xs text-content-secondary">{item.asked}</p>
@@ -201,6 +204,13 @@ export function ItemRow({ item, month, isAp, monthClosed, showStore, onChanged }
       {open && (
         <div className="space-y-3 px-3 pb-3 pl-9">
           {item.why && <p className="text-sm text-content-secondary"><span className="font-medium text-content-primary">Why: </span>{item.why}</p>}
+          {item.kind === "divvy" && (item.detail?.card || item.detail?.note) && (
+            <p className="text-sm text-content-secondary">
+              {item.detail.card && <><span className="font-medium text-content-primary">Card: </span>{item.detail.card}</>}
+              {item.detail.card && item.detail.note && " · "}
+              {item.detail.note && <><span className="font-medium text-content-primary">Card notes: </span>{item.detail.note}</>}
+            </p>
+          )}
           {item.kind === "ro_cost" && (
             <p className="text-xs text-content-muted">
               Vendor billed {fmt$(item.billed)} · RO cost (this vendor) {fmt$(item.ro_cost)}
