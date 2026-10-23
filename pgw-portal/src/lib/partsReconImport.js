@@ -173,8 +173,9 @@ export function fromBreakdown(sheets) {
 // ---------------------------------------------------------------------
 // Parts Recon Detail
 // ---------------------------------------------------------------------
-// Statement Lines columns
-const SL = { store: 0, vendor: 1, date: 2, inv: 3, po: 4, ro: 5, amt: 6, ap: 8, apInv: 9, apAmt: 10, note: 14, src: 15 };
+// Statement Lines columns. Cardholder and Card Notes (Divvy) were added
+// 10/23/2026; workbooks from before that don't have them.
+const SL = { store: 0, vendor: 1, date: 2, inv: 3, po: 4, ro: 5, amt: 6, ap: 8, apInv: 9, apAmt: 10, note: 14, src: 15, card: 16, cardNote: 17 };
 
 export function fromDetail(sheets) {
   const items = [], tasks = [], warnings = [];
@@ -195,6 +196,7 @@ export function fromDetail(sheets) {
     const store = s[SL.store], vendor = s[SL.vendor], st = s[SL.ap], amt = num(s[SL.amt]);
     if (!store || amt === null) continue;
     const unassigned = String(store).startsWith("Unassigned");
+    const card = str(s[SL.card]), cardNote = str(s[SL.cardNote]);
 
     // Divvy parts charge not keyed in AP -> on the tracker (build_detail.py: Divvy GP = bills not in AP).
     if (vendor === "Divvy" && st === "NOT IN AP" && !unassigned && amt > 0) {
@@ -204,13 +206,14 @@ export function fromDetail(sheets) {
         billed: r2(amt), amount: r2(amt),
         asked: "Enter this purchase in RO Writer AP on the correct RO (or send the receipt and RO #).",
         why: [str(s[SL.po]) && `PO / note: ${s[SL.po]}`, str(s[SL.src])].filter(Boolean).join(" - ") || null,
+        detail: card || cardNote ? { card, note: cardNote } : undefined,
       });
       continue;
     }
     if (unassigned) {
       if (Math.abs(amt) >= SET_ASIDE && st !== "MATCHED" && !String(st ?? "").startsWith("N/A")) {
         task("unassigned", store, vendor, "Couldn't tie this to a store - ask the cardholder / corporate which store and RO",
-          s[SL.inv], s[SL.po], s[SL.date], amt, null, s[SL.src]);
+          s[SL.inv], s[SL.po], s[SL.date], amt, null, [str(s[SL.src]), cardNote && `Card note: ${cardNote}`].filter(Boolean).join(" - "));
       }
       continue;
     }
