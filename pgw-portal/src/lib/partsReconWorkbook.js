@@ -115,3 +115,64 @@ export async function exportTasks(month, tasks) {
   ws.autoFilter = { from: "A1", to: "L1" };
   downloadWorkbook(await wb.xlsx.writeBuffer(), `${monthShort(month)} Parts Recon AP To-Do.xlsx`);
 }
+
+// The Deduction Report (lib/partsReconDeduction.js): a Summary sheet, one
+// row per store with the Tracker alongside, and a Detail sheet of every
+// line with something left to deduct -- the same rows as the screen.
+export async function exportDeductionReport(monthRow, report, storeKey = "") {
+  const month = monthRow.month;
+  const stores = storeKey ? report.stores.filter((s) => s.key === storeKey) : report.stores;
+  const wb = new ExcelJS.Workbook();
+
+  const sum = wb.addWorksheet("Summary");
+  sum.columns = [
+    { header: "Store #", key: "num", width: 9 }, { header: "Store", key: "store", width: 22 },
+    { header: "Lines", key: "count", width: 8 }, { header: "Left to deduct", key: "left", width: 15 },
+    { header: "Tracker left to deduct", key: "tracker", width: 15 }, { header: "Difference", key: "diff", width: 12 },
+  ];
+  headerFill(sum.getRow(1));
+  for (const s of stores) {
+    const row = sum.addRow({ num: s.storeNumber ?? "", store: s.name, count: s.count, left: s.left, tracker: s.trackerLeft, diff: s.diff });
+    row.getCell("num").numFmt = TEXT_FMT;
+    for (const k of ["left", "tracker", "diff"]) row.getCell(k).numFmt = CURRENCY_FMT;
+    applyBorders(row, 1, 6);
+  }
+  const add = (k) => Math.round(stores.reduce((a, s) => a + s[k], 0) * 100) / 100;
+  const total = sum.addRow({ num: "", store: "TOTAL", count: stores.reduce((a, s) => a + s.count, 0),
+    left: add("left"), tracker: add("trackerLeft"), diff: add("diff") });
+  total.font = { bold: true };
+  for (const k of ["left", "tracker", "diff"]) total.getCell(k).numFmt = CURRENCY_FMT;
+  applyBorders(total, 1, 6);
+  sum.addRow([]);
+  sum.addRow([monthRow.closed_at
+    ? `${monthRow.label}: closed ${new Date(monthRow.closed_at).toLocaleDateString()}${monthRow.closed_by_name ? ` by ${monthRow.closed_by_name}` : ""}.`
+    : `${monthRow.label}: OPEN. These figures can still change until AP closes the month.`]);
+  sum.addRow([`Exported ${new Date().toLocaleString()}.`]);
+  sum.views = [{ state: "frozen", ySplit: 1 }];
+
+  const det = wb.addWorksheet("Detail");
+  det.columns = [
+    { header: "Store #", key: "num", width: 9 }, { header: "Store", key: "store", width: 18 },
+    { header: "Kind", key: "kind", width: 22 }, { header: "Vendor", key: "vendor", width: 18 },
+    { header: "RO #", key: "ro", width: 12 }, { header: "Invoices", key: "inv", width: 28 },
+    { header: "Status", key: "status", width: 22 }, { header: "Item amount", key: "amount", width: 13 },
+    { header: "AP credit $", key: "credit", width: 12 }, { header: "Left to deduct", key: "left", width: 14 },
+  ];
+  headerFill(det.getRow(1));
+  for (const s of stores) {
+    for (const l of s.lines) {
+      const row = det.addRow({
+        num: s.storeNumber ?? "", store: s.name, kind: l.kindLabel, vendor: vendorLabel(l.vendor), ro: l.ro ?? "",
+        inv: l.invoices ?? "", status: l.status ? statusLabel(l.status) : "", amount: money(l.amount), credit: money(l.credit), left: money(l.left),
+      });
+      for (const k of ["num", "ro", "inv"]) row.getCell(k).numFmt = TEXT_FMT;
+      for (const k of ["amount", "credit", "left"]) row.getCell(k).numFmt = CURRENCY_FMT;
+      applyBorders(row, 1, 10);
+    }
+  }
+  det.views = [{ state: "frozen", ySplit: 1, xSplit: 2 }];
+  det.autoFilter = { from: "A1", to: "J1" };
+
+  const scope = storeKey && stores[0] ? ` ${stores[0].name}` : "";
+  downloadWorkbook(await wb.xlsx.writeBuffer(), `${monthShort(month)} Parts Recon Deductions${scope}.xlsx`);
+}
