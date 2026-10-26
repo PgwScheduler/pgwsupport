@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import {
   LogOut, LayoutDashboard, GraduationCap, Banknote, Clock, CalendarDays, FileText,
   ChevronRight, Eye, ShieldCheck, Building2, Users, KeyRound, ClipboardList, Wrench, Trophy, BarChart3, BookUser, History, Megaphone,
-  PackageSearch,
+  PackageSearch, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { canBuildReports } from "../lib/reportSpec.js";
@@ -45,6 +45,11 @@ const AUDIT_NAV = [{ key: "audit", label: "Change Log", icon: History }];
 
 const MASTER_NAV = [{ key: "users", label: "Users", icon: Users }];
 
+// Collapsed sidebar = icon-only rail. Remembered per browser; storage can
+// be unavailable (private window, blocked site data), so expanded is the
+// fallback.
+const SIDEBAR_COLLAPSED_KEY = "pgw.shell.sidebarCollapsed";
+
 export const ROLE_LABELS = {
   store: "Store Manager",
   district: "District Manager",
@@ -76,6 +81,15 @@ function scopeLabel(profile, storeCount) {
 export function Shell({ view, setView, children }) {
   const { profile, role, stores, currentStore, selectedStoreId, setSelectedStoreId, signOut } = useAuth();
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"; } catch { return false; }
+  });
+  const toggleCollapsed = () => {
+    setCollapsed((v) => {
+      try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, v ? "0" : "1"); } catch { /* per-viewer nicety only */ }
+      return !v;
+    });
+  };
   // The Home Office has no sales, cash or technicians (migration 68), so
   // those screens drop out of the menu while it is selected. An office
   // login (migration 78) sees only its read-only screens.
@@ -90,11 +104,29 @@ export function Shell({ view, setView, children }) {
   return (
     <div className="pgw-root flex min-h-screen bg-surface-page text-content-primary">
       {/* Sidebar */}
-      <aside className="hidden w-60 flex-shrink-0 flex-col justify-between border-r border-hairline bg-surface-card p-4 md:flex">
+      <aside
+        className={
+          "hidden flex-shrink-0 flex-col justify-between border-r border-hairline bg-surface-card md:flex " +
+          (collapsed ? "w-16 p-2" : "w-60 p-4")
+        }
+      >
         <div>
-          <div className="mb-6 px-1">
-            <LogoMark />
-            <p className="mt-1.5 text-[11px] uppercase tracking-widest text-content-muted">Operations Portal</p>
+          <div className={"mb-6 flex items-start " + (collapsed ? "justify-center" : "justify-between gap-2 px-1")}>
+            {!collapsed && (
+              <div>
+                <LogoMark />
+                <p className="mt-1.5 text-[11px] uppercase tracking-widest text-content-muted">Operations Portal</p>
+              </div>
+            )}
+            <button
+              onClick={toggleCollapsed}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+              className="flex-shrink-0 rounded-md p-2 text-content-muted hover:bg-surface-overlay hover:text-content-primary"
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
           </div>
           <nav className="space-y-1">
             {navItems.map((n) => {
@@ -103,25 +135,40 @@ export function Shell({ view, setView, children }) {
                 <button
                   key={n.key}
                   onClick={() => setView(n.key)}
+                  title={collapsed ? n.label : undefined}
+                  aria-label={collapsed ? n.label : undefined}
                   style={active ? { backgroundColor: T.accent, color: T.accentText } : {}}
-                  className={"flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium " + (active ? "" : "text-content-secondary hover:bg-surface-overlay")}
+                  className={
+                    "flex w-full items-center rounded-md py-2 text-sm font-medium " +
+                    (collapsed ? "justify-center px-0 " : "gap-2.5 px-3 ") +
+                    (active ? "" : "text-content-secondary hover:bg-surface-overlay")
+                  }
                 >
-                  <n.icon className="h-4 w-4" /> {n.label}
+                  <n.icon className="h-4 w-4 flex-shrink-0" /> {!collapsed && n.label}
                 </button>
               );
             })}
           </nav>
         </div>
-        <div className="rounded-lg border border-hairline bg-surface-page p-3">
-          <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-content-muted">
-            <Eye className="h-3 w-3" /> You can see
-          </p>
-          <p className="pgw-display mt-1 text-sm font-bold text-content-primary">{scopeLabel(profile, storeCount)}</p>
-          <p className="mt-0.5 text-xs text-content-muted">
-            {storeCount} store{storeCount === 1 ? "" : "s"}
-            {storeCount !== stores.length && " + Home Office"}
-          </p>
-        </div>
+        {collapsed ? (
+          <div
+            title={`You can see: ${scopeLabel(profile, storeCount)}`}
+            className="flex justify-center rounded-lg border border-hairline bg-surface-page py-2 text-content-muted"
+          >
+            <Eye className="h-4 w-4" />
+          </div>
+        ) : (
+          <div className="rounded-lg border border-hairline bg-surface-page p-3">
+            <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-content-muted">
+              <Eye className="h-3 w-3" /> You can see
+            </p>
+            <p className="pgw-display mt-1 text-sm font-bold text-content-primary">{scopeLabel(profile, storeCount)}</p>
+            <p className="mt-0.5 text-xs text-content-muted">
+              {storeCount} store{storeCount === 1 ? "" : "s"}
+              {storeCount !== stores.length && " + Home Office"}
+            </p>
+          </div>
+        )}
       </aside>
 
       {/* Main */}
