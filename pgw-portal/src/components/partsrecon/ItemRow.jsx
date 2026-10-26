@@ -4,6 +4,7 @@ import { partsReconApi } from "../../hooks/usePartsRecon.js";
 import { REVIEW_STATUSES, STORE_ACTIONS, STATUS, storeActionLabel } from "../../lib/partsRecon.js";
 import { Field, GhostBtn, PrimaryBtn, inputCls } from "../ui.jsx";
 import { Notice, StatusPill, fmt$, fmtDate } from "./shared.jsx";
+import { CreditBatchDialog } from "./CreditBatchDialog.jsx";
 
 // One store item: the RO, what's off, what the store is asked to do;
 // opened, the vendor's invoice lines and RO parts, the store's reply,
@@ -170,8 +171,9 @@ function Files({ item, month, onDone }) {
   );
 }
 
-export function ItemRow({ item, month, isAp, monthClosed, showStore, onChanged }) {
+export function ItemRow({ item, month, isAp, monthClosed, showStore, onChanged, batch }) {
   const [open, setOpen] = useState(false);
+  const [showBatch, setShowBatch] = useState(false);
   const cleared = item.status === "credit_received" || item.status === "explained";
   const amount = item.amount > 0 ? fmt$(item.amount)
     : item.ro_higher ? <span className="text-content-muted">RO {fmt$(item.ro_higher)} higher</span> : fmt$(0);
@@ -218,6 +220,14 @@ export function ItemRow({ item, month, isAp, monthClosed, showStore, onChanged }
             </p>
           )}
           <Lines detail={item.detail} />
+          {batch && (
+            <p className="text-sm text-content-secondary">
+              Part of credit # <span className="font-mono">{batch.credit_no}</span>: {batch.lines} item(s), {fmt$(batch.total)}
+              {batch.outcome === "earlier_month" && " (logged for AP as a credit for an earlier month)"}.{" "}
+              <button className="text-accent-text hover:underline" onClick={() => setShowBatch(true)}>See every line</button>
+            </p>
+          )}
+          {showBatch && <CreditBatchDialog batchId={batch.batch_id} onClose={() => setShowBatch(false)} />}
           {item.answered_at && (
             <div className="rounded-lg border border-hairline px-3 py-2 text-sm">
               <p className="font-medium text-content-primary">Store reply · {item.answered_by_name}, {fmtDate(item.answered_at)}</p>
