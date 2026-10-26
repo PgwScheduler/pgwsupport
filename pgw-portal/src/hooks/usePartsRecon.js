@@ -172,3 +172,21 @@ export const creditApi = {
     p_lines: lines,
   }),
 };
+
+// ---------------------------------------------------------------------
+// Other bills (migration 92): AP-entered items not on a vendor statement.
+// ---------------------------------------------------------------------
+export const usePartsReconOtherBills = () => useRpc("parts_recon_other_bills", {});
+export const usePartsReconOtherBillStores = () => useRpc("parts_recon_other_bill_stores", {});
+
+const money = (v) => Number(String(v ?? "").replace(/[$,\s]/g, ""));
+export const otherBillApi = {
+  create: (b) => rpc("parts_recon_other_bill_create", {
+    p_location: b.locationId, p_vendor: b.vendor, p_start: b.month, p_end: b.repeat ? b.endMonth : b.month,
+    p_amount: money(b.amount), p_bill_no: b.billNo, p_ro: b.ro || null, p_description: b.description || null,
+  }),
+  update: (id, b) => rpc("parts_recon_other_bill_update", {
+    p_id: id, p_vendor: b.vendor, p_amount: money(b.amount), p_bill_no: b.billNo, p_ro: b.ro || null, p_description: b.description || null,
+  }),
+  remove: (id) => rpc("parts_recon_other_bill_delete", { p_id: id }),
+};

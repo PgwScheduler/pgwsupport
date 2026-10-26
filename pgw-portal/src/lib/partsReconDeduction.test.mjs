@@ -61,5 +61,14 @@ const orphan = buildDeductionReport({ items: [...items, item(8, "L2", "Wesmark",
 const w = orphan.stores.find((s) => s.storeNumber === "3938");
 eq("orphan item shows as a difference", [w.left, w.trackerLeft, w.diff, orphan.mismatches], [312, 300, 12, 1]);
 
+// An Other bill (migration 92) is an item like any other: counted and labelled.
+const ob = buildDeductionReport({
+  items: [item(9, "L3", "Sunbeam", "other", "Allegro Towing", "open", 90, null, 90)],
+  tracker: [{ recon_store: "Sunbeam", location_id: "L3", vendor: "Allegro Towing", items: 1, left_to_deduct: 90, script_amount: null }],
+  locations,
+});
+const sun = ob.stores.find((s) => s.storeNumber === "3111");
+eq("Other bill counted and labelled", [sun.left, sun.trackerLeft, sun.lines[0].kindLabel], [90, 90, "Other bill"]);
+
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

@@ -7,6 +7,7 @@ import { ItemsPanel } from "./ItemsPanel.jsx";
 import { TasksPanel } from "./TasksPanel.jsx";
 import { TrackerPanel } from "./TrackerPanel.jsx";
 import { DeductionPanel } from "./DeductionPanel.jsx";
+import { OtherBillsPanel } from "./OtherBillsPanel.jsx";
 import { ImportPanel } from "./ImportPanel.jsx";
 import { Notice, Pill, Segmented, selectSm } from "./shared.jsx";
 
@@ -24,7 +25,9 @@ export function PartsReconView() {
   const isStore = role === "store";
 
   useEffect(() => {
-    if (!month && months.data?.length) setMonth(months.data[0].month);
+    // Newest month that has been imported: a future month that only holds
+    // Other bills (migration 92) isn't where anyone starts.
+    if (!month && months.data?.length) setMonth((months.data.find((m) => m.imported_at) ?? months.data[0]).month);
   }, [months.data, month]);
 
   const monthRow = months.data?.find((m) => m.month === month) ?? null;
@@ -33,6 +36,7 @@ export function PartsReconView() {
     ...(isAp ? [["tasks", "AP to-do"]] : []),
     ...(!isStore ? [["tracker", "Tracker"]] : []),
     ...(isAp ? [["deductions", "Deductions"]] : []),
+    ...(isAp ? [["otherbills", "Other bills"]] : []),
     ...(isAp ? [["import", "Import & month"]] : []),
   ];
   const current = tabs.some(([k]) => k === tab) ? tab : "items";
@@ -81,6 +85,7 @@ export function PartsReconView() {
       {current === "tasks" && isAp && <TasksPanel key={month} month={month} />}
       {current === "tracker" && <TrackerPanel key={month} month={month} />}
       {current === "deductions" && isAp && <DeductionPanel key={month} month={month} monthRow={monthRow} />}
+      {current === "otherbills" && isAp && <OtherBillsPanel onChanged={months.reload} />}
       {current === "import" && isAp && (
         <ImportPanel month={month} monthRow={monthRow} managesTeam={!!access.data?.manages_team}
           onImported={(m) => { setMonth(m); months.reload(); }} onChanged={months.reload} />

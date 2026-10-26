@@ -148,7 +148,9 @@ function MonthCard({ monthRow, onChanged }) {
     <Card className="space-y-2 p-4">
       <h3 className="pgw-display text-base font-bold text-content-primary">{monthRow.label}</h3>
       <p className="text-sm text-content-secondary">
-        Imported {fmtDate(monthRow.imported_at)} by {monthRow.imported_by_name ?? "—"} ·{" "}
+        {monthRow.imported_at
+          ? <>Imported {fmtDate(monthRow.imported_at)} by {monthRow.imported_by_name ?? "—"}</>
+          : "No recon imported yet: this month only holds Other bills until its run is imported"} ·{" "}
         {closed ? `closed ${fmtDate(monthRow.closed_at)}` : released ? `released to stores ${fmtDate(monthRow.released_at)}` : "not released to stores yet"}
       </p>
       {monthRow.files?.length > 0 && <p className="text-xs text-content-muted">Files: {monthRow.files.map((f) => f.name).join(", ")}</p>}

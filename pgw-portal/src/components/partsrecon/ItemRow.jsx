@@ -54,7 +54,7 @@ function Lines({ detail }) {
 }
 
 function ReplyForm({ item, onDone }) {
-  const [v, setV] = useState({ action: item.kind === "divvy" ? "entered_in_ap" : "returned", creditNo: "", creditAmt: "", note: "" });
+  const [v, setV] = useState({ action: item.kind === "divvy" ? "entered_in_ap" : item.kind === "other" ? "other" : "returned", creditNo: "", creditAmt: "", note: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const set = (p) => setV((x) => ({ ...x, ...p }));
@@ -185,9 +185,11 @@ export function ItemRow({ item, month, isAp, monthClosed, showStore, onChanged, 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {showStore && <span className="text-sm font-semibold text-content-primary">{item.recon_store}</span>}
             <span className="text-sm font-medium text-content-primary">
-              {item.kind === "divvy" ? `Divvy · ${item.invoices ?? ""}` : `RO ${item.ro ?? "—"}`}
+              {item.kind === "divvy" ? `Divvy · ${item.invoices ?? ""}`
+                : item.kind === "other" ? `Other bill · ${item.invoices ?? ""}` : `RO ${item.ro ?? "—"}`}
             </span>
-            {item.kind !== "divvy" && item.invoices && <span className="font-mono text-xs text-content-muted">inv {item.invoices}</span>}
+            {item.kind === "other" && item.ro && <span className="font-mono text-xs text-content-muted">RO {item.ro}</span>}
+            {item.kind !== "divvy" && item.kind !== "other" && item.invoices && <span className="font-mono text-xs text-content-muted">inv {item.invoices}</span>}
             {item.kind === "divvy" && item.txn_date && <span className="text-xs text-content-muted">{fmtDate(item.txn_date)}</span>}
             {item.kind === "divvy" && item.detail?.note && (
               <span className="max-w-xs truncate text-xs text-content-muted" title={item.detail.note}>Note: {item.detail.note}</span>
