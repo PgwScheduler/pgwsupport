@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Check, Info, X } from "lucide-react";
-import { useGpBudget } from "../../hooks/useGpBudget.js";
-import { Card } from "../ui.jsx";
+import { AlertTriangle, ArrowDown, ArrowUp, Check, Info, RefreshCw, X } from "lucide-react";
+import { REFRESH_MS, useGpBudget } from "../../hooks/useGpBudget.js";
+import { Card, GhostBtn } from "../ui.jsx";
 import { buildGpBudget, trackTone } from "../../lib/gpBudget.js";
+import { ANNUAL_TIERS, BELOW_TIERS } from "../../lib/bonusTiers.js";
 import { pct } from "../../lib/format.js";
 
 // =====================================================================
@@ -25,6 +26,14 @@ function VsBudget({ track }) {
     : <span className="inline-flex items-center gap-1 text-danger"><ArrowDown className="h-3 w-3" /> Under</span>;
 }
 
+const TREND_LABEL = Object.fromEntries([...ANNUAL_TIERS, BELOW_TIERS].map((t) => [t.key, t.label]));
+
+function Trend({ trend }) {
+  if (trend === "na") return <span className="text-content-muted" title="This store's bonus plan has no Gold/Silver/Bronze tiers">N/A</span>;
+  if (!trend) return <span className="text-content-muted">—</span>;
+  return <span className="whitespace-nowrap">{TREND_LABEL[trend]}</span>;
+}
+
 function Tile({ label, value, hint }) {
   return (
     <Card className="p-3">
@@ -44,13 +53,14 @@ function Cells({ r }) {
       <td className="px-2 py-1 text-right tabular-nums">{usd(r.proj)}</td>
       <td className={"px-2 py-1 text-right tabular-nums " + toneCls(r.track)}>{r.track == null ? "—" : pct(r.track)}</td>
       <td className="px-2 py-1 text-right"><VsBudget track={r.track} /></td>
+      <td className="px-2 py-1 text-left"><Trend trend={r.trend} /></td>
     </>
   );
 }
 
 function TotalRow({ t, strong }) {
   return (
-    <tr className={"border-y border-accent/40 font-semibold " + (strong ? "bg-accent/15" : "bg-surface-overlay")}>
+    <tr className={"border-y border-accent/40 font-bold " + (strong ? "bg-accent/15" : "bg-surface-overlay")}>
       <td colSpan={3} className="whitespace-nowrap px-2 py-1 text-right text-warning">◆ {t.label}</td>
       <Cells r={t} />
     </tr>
@@ -103,6 +113,14 @@ export function GpBudgetView() {
             <input type="checkbox" checked={speedee} onChange={(e) => setSpeedee(e.target.checked)} className="accent-[var(--accent)]" />
             Include SpeeDee
           </label>
+          <GhostBtn onClick={r.reload} disabled={r.loading} title="Load the latest numbers">
+            <RefreshCw className={"h-4 w-4" + (r.loading ? " animate-spin" : "")} /> {r.loading ? "Refreshing…" : "Refresh"}
+          </GhostBtn>
+          {r.updatedAt && (
+            <span className="text-xs text-content-muted">
+              Updated {r.updatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · refreshes every {REFRESH_MS / 60000} min
+            </span>
+          )}
         </div>
       </Card>
 
@@ -111,9 +129,10 @@ export function GpBudgetView() {
           <AlertTriangle className="h-4 w-4" /> {r.error}
         </p>
       )}
-      {r.loading && <p className="text-sm text-content-secondary">Loading…</p>}
+      {/* Only the first load blanks the page; a refresh keeps the table up. */}
+      {r.loading && !report && <p className="text-sm text-content-secondary">Loading…</p>}
 
-      {report && !r.loading && (
+      {report && (
         <>
           <h2 className="pgw-display text-lg font-bold text-content-primary">
             {r.year} Gross Profit vs Budget — Through {throughLabel}
@@ -137,9 +156,13 @@ export function GpBudgetView() {
           )}
 
           <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* The table scrolls in its own box, both ways, like a frozen
+                pane: the header stays on top scrolling down and moves with
+                its columns sideways. (The page can't carry a sticky header:
+                Shell's <main> is overflow-auto, which would capture it.) */}
+            <div className="max-h-[calc(100dvh-2rem)] overflow-auto">
               <table className="min-w-full text-xs text-content-primary">
-                <thead className="bg-surface-overlay text-[11px] text-accent">
+                <thead className="sticky top-0 z-10 bg-surface-overlay text-[11px] text-accent shadow-[0_1px_0_var(--border)]">
                   <tr>
                     <th className="px-2 py-1.5 text-left font-semibold">Lead</th>
                     <th className="px-2 py-1.5 text-left font-semibold">Division</th>
@@ -150,6 +173,7 @@ export function GpBudgetView() {
                     <th className="whitespace-nowrap px-2 py-1.5 text-right font-semibold">Proj. Full Yr</th>
                     <th className="whitespace-nowrap px-2 py-1.5 text-right font-semibold">Track %</th>
                     <th className="whitespace-nowrap px-2 py-1.5 text-right font-semibold">vs Budget</th>
+                    <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">Projected Trend</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -159,8 +183,8 @@ export function GpBudgetView() {
                         <React.Fragment key={D.id}>
                           {D.stores.map((s, i) => (
                             <tr key={s.id} className="hover:bg-surface-overlay">
-                              <td className="whitespace-nowrap px-2 py-1 font-semibold text-accent">{i === 0 ? L.name : ""}</td>
-                              <td className="whitespace-nowrap px-2 py-1 text-accent">{i === 0 ? D.name : ""}</td>
+                              <td className="whitespace-nowrap px-2 py-1 font-bold text-accent">{i === 0 ? L.name : ""}</td>
+                              <td className="whitespace-nowrap px-2 py-1 font-bold text-accent">{i === 0 ? D.name : ""}</td>
                               <td className="whitespace-nowrap px-2 py-1 font-medium" title={`#${s.storeNumber}`}>{s.name}</td>
                               <Cells r={s} />
                             </tr>
@@ -171,6 +195,8 @@ export function GpBudgetView() {
                       {L.divisions.length > 1 && <TotalRow t={L.total} strong />}
                     </React.Fragment>
                   ))}
+                  {/* A split region's combined total (Florida & North), as before, just above PGW. */}
+                  {report.combinedTotals.map((t) => <TotalRow key={t.label} t={t} strong />)}
                   {report.leads.length > 1 && <TotalRow t={report.total} strong />}
                 </tbody>
               </table>
