@@ -19,7 +19,7 @@ const STORE_HEAD = [
   "Turned Other", "Turned Here", "Total Turned", "Productivity",
   "Actual Sales", "Sales Required", "% of Goal", "Work Orders", "ARO", "FLAT",
 ];
-const PAY_HEAD = [
+export const PAY_HEAD = [
   "Hourly Rate", "Flat Rate", "Hourly Earned", "OT Earned", "Total Hourly",
   "Total Flat", "Bonus", "Incentives", "Paycheck",
 ];
@@ -37,9 +37,9 @@ const dailyStoreHead = (dayLabels) => [
   "Actual Sales", "Sales Required", "% of Goal", "Work Orders", "ARO", "FLAT",
 ];
 
-const headFor = (dayLabels) => (dayLabels?.length ? dailyStoreHead(dayLabels) : STORE_HEAD);
+export const headFor = (dayLabels) => (dayLabels?.length ? dailyStoreHead(dayLabels) : STORE_HEAD);
 
-function storeCells(row, dates) {
+export function storeCells(row, dates) {
   const c = computeStoreRow(row.entry);
   const e = row.entry;
   const tail = [
@@ -69,7 +69,7 @@ function storeCells(row, dates) {
   ];
 }
 
-function payCells(row) {
+export function payCells(row) {
   const p = computePayRow(row.entry, row.rate, row.pay);
   if (p.manager) {
     return ["x", "x", "x", "x", "x", "x", d2(p.bonus), d2(p.incentives), money(p.paycheck)];
@@ -159,15 +159,15 @@ export function printPayroll(store, week, rows, privileged, summary, dates = [],
 // DOES include labor sales (exposed by decision) and the payroll-dollar
 // TOTAL in the summary (a Speedee-brand allowance) — never an individual
 // paycheck.
-const SPEEDEE_STORE_HEAD = [
+export const SPEEDEE_STORE_HEAD = [
   "Position", "Employee", "PTO Days", "Clock Hrs Other", "Clock Hrs Here", "Total Hours",
   "Labor %", "Labor % Eligible", "Labor Sales", "Spiffs", "Total Incentive", "Sales Expectation",
 ];
-const SPEEDEE_PAY_HEAD = [
+export const SPEEDEE_PAY_HEAD = [
   "Hourly Rate", "Hourly Earned", "OT Earned", "Hourly & OT", "Labor % Pay", "Paycheck (entered)",
 ];
 
-function speedeeStoreCells(row) {
+export function speedeeStoreCells(row) {
   const sc = computeSpeedeeStoreRow(row.mEntry, row.roleSalesRate);
   const e = row.mEntry;
   return [
@@ -178,7 +178,7 @@ function speedeeStoreCells(row) {
   ];
 }
 
-function speedeePayCells(row) {
+export function speedeePayCells(row) {
   const ref = computeSpeedeeRefRow(row.mEntry, row.mRate);
   const sc = computeSpeedeeStoreRow(row.mEntry, row.roleSalesRate);
   const pc = row.mPay?.paycheck_amount;

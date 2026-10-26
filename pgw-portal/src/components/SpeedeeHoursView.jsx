@@ -15,6 +15,7 @@ import { Card, GhostBtn, LayoutToggle, PrimaryBtn, SectionHeader, T } from "./ui
 import { EmployeeProfilePanel } from "./payroll/EmployeeProfilePanel.jsx";
 import { DayCell, DayModeToggle } from "./payroll/DayCell.jsx";
 import { PayrollPhoneList, PAYROLL_LAYOUTS } from "./payroll/PayrollPhoneList.jsx";
+import { ExtractAllStoresButton } from "./payroll/ExtractAllStoresButton.jsx";
 import { useIsPhone } from "../hooks/useMediaQuery.js";
 
 // SpeeDee turns no hours, so its day columns carry only the two figures
@@ -201,6 +202,7 @@ export function SpeedeeHoursView({ store, cutover }) {
             <GhostBtn onClick={() => printSpeedee(store, week, exportRows, privileged, summary)} disabled={rows.length === 0}>
               <Printer className="h-4 w-4" /> Print / PDF
             </GhostBtn>
+            <ExtractAllStoresButton week={week} cutover={cutover} />
           </div>
         }
       />

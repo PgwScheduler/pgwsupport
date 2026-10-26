@@ -15,6 +15,7 @@ import { exportPayrollCSV, printPayroll } from "../lib/payrollExport.js";
 import { SpeedeeHoursView } from "./SpeedeeHoursView.jsx";
 import { Card, GhostBtn, LayoutToggle, PrimaryBtn, SectionHeader, T } from "./ui.jsx";
 import { EmployeeProfilePanel } from "./payroll/EmployeeProfilePanel.jsx";
+import { ExtractAllStoresButton } from "./payroll/ExtractAllStoresButton.jsx";
 import { DayCell, DayModeToggle } from "./payroll/DayCell.jsx";
 import { PayrollPhoneList, PAYROLL_LAYOUTS } from "./payroll/PayrollPhoneList.jsx";
 import { useIsPhone } from "../hooks/useMediaQuery.js";
@@ -259,6 +260,7 @@ function MidasHoursView({ store, cutover, onNavigate }) {
             <GhostBtn onClick={() => printPayroll(store, week, merged, privileged, summary, dates, dayLabels)} disabled={rows.length === 0}>
               <Printer className="h-4 w-4" /> Print / PDF
             </GhostBtn>
+            <ExtractAllStoresButton week={week} cutover={cutover} />
           </div>
         }
       />
