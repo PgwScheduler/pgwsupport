@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../context/AuthProvider.jsx";
 import { weekEndOf, weekDates, isSundayWeek } from "../lib/weekUtils.js";
@@ -55,9 +55,15 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
   const [days, setDays] = useState({});      // empId -> dateIso -> day row
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Only the latest fetch may write. A store change resets the week while
+  // the first fetch is still in flight; without this the older response
+  // could land last and leave the grid showing another week's hours.
+  const seq = useRef(0);
 
   const fetchAll = useCallback(async () => {
     if (!locationId || !weekStart) return;
+    const mine = ++seq.current;
+    const stale = () => mine !== seq.current;
     setLoading(true);
 
     const [empRes, entRes] = await Promise.all([
@@ -65,6 +71,7 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
         .order("position", { ascending: true }).order("created_at", { ascending: true }),
       supabase.from("timesheet_entries").select("*").eq("location_id", locationId).eq("week_start", weekStart),
     ]);
+    if (stale()) return;
     if (empRes.error || entRes.error) {
       setError((empRes.error || entRes.error).message);
       setLoading(false);
@@ -83,6 +90,7 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
     const extMap = {};
     if (entIds.length) {
       const { data: extRows } = await supabase.from(extTable).select("*").in("timesheet_entry_id", entIds);
+      if (stale()) return;
       for (const x of extRows ?? []) {
         const empId = entById[x.timesheet_entry_id]?.employee_id;
         if (empId) extMap[empId] = x;
@@ -97,6 +105,7 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
         d_from: weekStart,
         d_to: weekEndOf(weekStart, cutover),
       });
+      if (stale()) return;
       if (dayErr) setError(dayErr.message);
       const dm = {};
       for (const d of dayRows ?? []) {
@@ -121,6 +130,7 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
           : Promise.resolve({ data: [] }),
         entIds.length ? supabase.from("timesheet_pay").select("*").in("timesheet_entry_id", entIds) : Promise.resolve({ data: [] }),
       ]);
+      if (stale()) return;
       if (rateRes.error) setError(rateRes.error.message);
       const histByEmp = {};
       for (const h of rateRes.data ?? []) (histByEmp[h.employee_id] ||= []).push(h);
@@ -142,6 +152,7 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
         supabase.from("store_week_sales").select("*").eq("location_id", locationId).eq("week_start", weekStart).maybeSingle(),
         supabase.rpc("payroll_speedee_summary", { loc: locationId, wk: weekStart }),
       ]);
+      if (stale()) return;
       const rrMap = {}; for (const r of rrRes.data ?? []) rrMap[r.position] = r.sales_rate_per_hour;
       setRoleRates(rrMap);
       setWeekSales(wsRes.data ?? null);
@@ -155,6 +166,7 @@ export function usePayroll(locationId, weekStart, brand, cutover) {
           supabase.rpc("payroll_pct_summary", { loc: locationId, wk: weekStart }),
           supabase.rpc("flat_flags_for_week", { loc: locationId, wk: weekStart }),
         ]);
+        if (stale()) return;
         setRpcSummary(Array.isArray(sumRes.data) ? sumRes.data[0] ?? null : sumRes.data ?? null);
         const fm = {}; for (const f of flagRes.data ?? []) fm[f.employee_id] = f.flat_flag;
         setFlatFlags(fm);

@@ -39,6 +39,11 @@ const dailyStoreHead = (dayLabels) => [
 
 export const headFor = (dayLabels) => (dayLabels?.length ? dailyStoreHead(dayLabels) : STORE_HEAD);
 
+// The header for a single-store export. HoursView's day labels are never
+// empty (Mon–Sat before the cutover), so the week's DATES decide: no dates
+// means a weekly week, whose cells are the weekly columns (storeCells).
+export const storeHeadFor = (dates, dayLabels) => headFor(dates?.length ? dayLabels : []);
+
 export function storeCells(row, dates) {
   const c = computeStoreRow(row.entry);
   const e = row.entry;
@@ -81,7 +86,7 @@ export function payCells(row) {
 }
 
 export function exportPayrollCSV(store, week, rows, privileged, summary, dates = [], dayLabels = []) {
-  const head = ["Store #", "Store", "Week of", ...headFor(dayLabels), ...(privileged ? PAY_HEAD : [])];
+  const head = ["Store #", "Store", "Week of", ...storeHeadFor(dates, dayLabels), ...(privileged ? PAY_HEAD : [])];
   const body = rows.map((r) => [
     store.store_number, store.name, week, ...storeCells(r, dates), ...(privileged ? payCells(r) : []),
   ]);
@@ -102,7 +107,7 @@ export function exportPayrollCSV(store, week, rows, privileged, summary, dates =
 }
 
 export function printPayroll(store, week, rows, privileged, summary, dates = [], dayLabels = []) {
-  const storeHead = headFor(dayLabels);
+  const storeHead = storeHeadFor(dates, dayLabels);
   const th = [...storeHead, ...(privileged ? PAY_HEAD : [])]
     .map((h) => `<th>${h}</th>`).join("");
   const body = rows.map((r) => {
