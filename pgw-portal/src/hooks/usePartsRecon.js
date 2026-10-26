@@ -137,3 +137,38 @@ export const partsReconApi = {
     return { data: { ...fin.data, responses_applied: applied }, error: null };
   },
 };
+
+// ---------------------------------------------------------------------
+// Mass Credit Import (migration 91): one vendor credit across many items.
+// ---------------------------------------------------------------------
+export const usePartsReconCreditStores = (enabled = true) => useRpc("parts_recon_credit_stores", {}, enabled);
+export const usePartsReconCreditVendors = (location) =>
+  useRpc("parts_recon_credit_vendors", { p_location: location }, !!location);
+export const usePartsReconItemBatches = (month, location) =>
+  useRpc("parts_recon_item_batches", { p_month: month, p_location: location ?? null }, !!month);
+export const usePartsReconCreditBatchList = (location, enabled = true) =>
+  useRpc("parts_recon_credit_batch_list", { p_location: location ?? null }, enabled);
+
+export const creditApi = {
+  candidates: (location, vendor, query) =>
+    rpc("parts_recon_credit_candidates", { p_location: location, p_vendor: vendor, p_query: query }),
+  creditNoUsed: (location, creditNo) =>
+    rpc("parts_recon_credit_no_used", { p_location: location, p_credit_no: creditNo }),
+  batch: (id) => rpc("parts_recon_credit_batch", { p_batch: id }),
+
+  // The memo goes up first, under the batch's own folder; the submit
+  // checks it is there. A failed submit can be retried with the same id
+  // and memo (nothing was written).
+  async uploadMemo(batchId, file) {
+    const path = `batches/${batchId}/${crypto.randomUUID()}-${safeName(file.name)}`;
+    const { error } = await supabase.storage.from(BUCKET).upload(path, file);
+    return error ? { error: error.message } : { data: path, error: null };
+  },
+  submit: (batchId, h, lines, memo) => rpc("parts_recon_credit_batch_submit", {
+    p_batch: batchId, p_location: h.locationId, p_vendor: h.vendor, p_credit_no: h.creditNo.trim(),
+    p_credit_date: h.creditDate || null, p_total: Number(String(h.total).replace(/[$,\s]/g, "")),
+    p_action: h.action, p_note: h.note || null,
+    p_file_path: memo?.path ?? null, p_file_name: memo?.name ?? null, p_file_size: memo?.size ?? null,
+    p_lines: lines,
+  }),
+};

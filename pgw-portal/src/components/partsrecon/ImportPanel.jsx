@@ -5,6 +5,7 @@ import { buildImport, identify, loadWorkbook, sheetsOf } from "../../lib/partsRe
 import { monthShort } from "../../lib/partsRecon.js";
 import { Card, Field, GhostBtn, PrimaryBtn, inputCls } from "../ui.jsx";
 import { Notice, fmt$, fmtDate } from "./shared.jsx";
+import { CreditBatchDialog } from "./CreditBatchDialog.jsx";
 
 // AP's side: bring a run in, release it to the stores, close it; other
 // credits for earlier months; who's on the AP team.
@@ -167,6 +168,7 @@ function OtherCredits({ month }) {
   const blank = { store: "", vendor: "", creditNo: "", creditDate: "", origInvoice: "", ro: "", parts: "", amount: "", forMonth: "", notes: "" };
   const [v, setV] = useState(blank);
   const [err, setErr] = useState(null);
+  const [viewBatch, setViewBatch] = useState(null);
   const save = async () => {
     setErr(null);
     const r = await partsReconApi.saveOtherCredit(month, v);
@@ -194,7 +196,10 @@ function OtherCredits({ month }) {
                   <td className="py-1 pr-2 font-mono">{c.credit_no}</td><td className="py-1 pr-2">{fmtDate(c.credit_date)}</td>
                   <td className="py-1 pr-2">RO {c.ro ?? "—"} · inv {c.orig_invoice ?? "—"}</td><td className="py-1 pr-2">{c.parts}</td>
                   <td className="py-1 pr-2 text-right tabular-nums">{fmt$(c.amount)}</td><td className="py-1 pr-2">{c.for_month}</td>
-                  <td className="py-1 pr-2 text-content-muted">{c.notes}</td>
+                  <td className="py-1 pr-2 text-content-muted">
+                    {c.notes}
+                    {c.batch_id && <button className="ml-1 text-accent-text hover:underline" onClick={() => setViewBatch(c.batch_id)}>See the credit</button>}
+                  </td>
                   <td className="py-1"><button onClick={() => del(c.id)} title="Remove" className="text-content-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button></td>
                 </tr>
               ))}
@@ -214,6 +219,7 @@ function OtherCredits({ month }) {
       </div>
       {err && <Notice tone="error">{err}</Notice>}
       <GhostBtn onClick={save} disabled={!v.store.trim()}>Add credit</GhostBtn>
+      {viewBatch && <CreditBatchDialog batchId={viewBatch} onClose={() => setViewBatch(null)} />}
     </Card>
   );
 }

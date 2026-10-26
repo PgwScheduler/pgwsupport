@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from "react";
-import { Download, PackageSearch, Search } from "lucide-react";
-import { usePartsReconItems, usePartsReconNotes } from "../../hooks/usePartsRecon.js";
+import { Download, PackageSearch, ReceiptText, Search } from "lucide-react";
+import { usePartsReconItemBatches, usePartsReconItems, usePartsReconNotes } from "../../hooks/usePartsRecon.js";
 import { groupItems, itemTotals, matchesFilter, matchesSearch, vendorLabel, KIND_LABEL } from "../../lib/partsRecon.js";
 import { exportItems } from "../../lib/partsReconWorkbook.js";
 import { Card, Empty, GhostBtn, inputCls } from "../ui.jsx";
 import { ItemRow } from "./ItemRow.jsx";
+import { MassCreditPanel } from "./MassCreditPanel.jsx";
 import { Notice, Segmented, Stat, fmt$, selectSm } from "./shared.jsx";
 
 // The store items for a month. A store login sees its own store; DMs,
@@ -43,8 +44,12 @@ function StockNotes({ notes }) {
   );
 }
 
-export function ItemsPanel({ month, monthRow, isAp, isStore, storeLocationId, onChanged }) {
+export function ItemsPanel({ month, monthRow, isAp, isStore, storeLocationId, onChanged, canCredit }) {
   const items = usePartsReconItems(month, isStore ? storeLocationId : null);
+  // Mass credits (migration 91): which credit each item is on, and the entry screen.
+  const batches = usePartsReconItemBatches(month, isStore ? storeLocationId : null);
+  const batchOf = useMemo(() => new Map((batches.data ?? []).map((b) => [b.item_id, b])), [batches.data]);
+  const [crediting, setCrediting] = useState(false);
   const notes = usePartsReconNotes(month, isStore ? storeLocationId : null);
   const [filter, setFilter] = useState(isAp ? "answered" : "open");
   const [store, setStore] = useState("");
@@ -61,10 +66,13 @@ export function ItemsPanel({ month, monthRow, isAp, isStore, storeLocationId, on
   [inStore, vendor, kind, filter, text]);
   const totals = useMemo(() => itemTotals(inStore), [inStore]);
   const groups = useMemo(() => groupItems(shown), [shown]);
-  const reload = () => { items.reload(); onChanged?.(); };
+  const reload = () => { items.reload(); batches.reload(); onChanged?.(); };
   const closed = !!monthRow?.closed_at;
   const LIMIT = 400;
 
+  if (crediting) {
+    return <MassCreditPanel defaultLocationId={isStore ? storeLocationId : ""} onClose={() => setCrediting(false)} onSubmitted={reload} />;
+  }
   if (items.loading && !items.data) return <p className="text-sm text-content-muted">Loading items…</p>;
   if (items.error) return <Notice tone="error">{items.error}</Notice>;
   if (!all.length) return <Empty icon={PackageSearch} title="Nothing to answer for this month" hint="No store items were imported for your stores." />;
@@ -109,6 +117,11 @@ export function ItemsPanel({ month, monthRow, isAp, isStore, storeLocationId, on
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-content-muted" />
           <input className={inputCls + " pl-8"} placeholder="RO #, invoice, vendor…" value={text} onChange={(e) => setText(e.target.value)} />
         </div>
+        {canCredit && (
+          <GhostBtn onClick={() => setCrediting(true)} title="One credit invoice applied to every item it covers">
+            <ReceiptText className="h-4 w-4" /> Enter a vendor credit
+          </GhostBtn>
+        )}
         {!isStore && (
           <GhostBtn onClick={() => exportItems(month, shown)} disabled={!shown.length}>
             <Download className="h-4 w-4" /> Excel
@@ -138,7 +151,7 @@ export function ItemsPanel({ month, monthRow, isAp, isStore, storeLocationId, on
                   </span>
                 </div>
                 {list.map((i) => (
-                  <ItemRow key={i.id} item={i} month={month} isAp={isAp} monthClosed={closed} showStore={false} onChanged={reload} />
+                  <ItemRow key={i.id} item={i} month={month} isAp={isAp} monthClosed={closed} showStore={false} onChanged={reload} batch={batchOf.get(i.id)} />
                 ))}
               </Card>
             );

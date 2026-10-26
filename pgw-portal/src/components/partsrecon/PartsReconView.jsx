@@ -75,7 +75,8 @@ export function PartsReconView() {
       {tabs.length > 1 && <Segmented options={tabs} value={current} onChange={setTab} />}
       {current === "items" && (
         <ItemsPanel key={month + (isStore ? profile?.location_id : "")} month={month} monthRow={monthRow} isAp={isAp}
-          isStore={isStore} storeLocationId={profile?.location_id} onChanged={months.reload} />
+          isStore={isStore} storeLocationId={profile?.location_id} onChanged={months.reload}
+          canCredit={!isAp && !!access.data?.can_answer} />
       )}
       {current === "tasks" && isAp && <TasksPanel key={month} month={month} />}
       {current === "tracker" && <TrackerPanel key={month} month={month} />}
