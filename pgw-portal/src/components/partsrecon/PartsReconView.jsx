@@ -6,6 +6,7 @@ import { Empty, SectionHeader } from "../ui.jsx";
 import { ItemsPanel } from "./ItemsPanel.jsx";
 import { TasksPanel } from "./TasksPanel.jsx";
 import { TrackerPanel } from "./TrackerPanel.jsx";
+import { DeductionPanel } from "./DeductionPanel.jsx";
 import { ImportPanel } from "./ImportPanel.jsx";
 import { Notice, Pill, Segmented, selectSm } from "./shared.jsx";
 
@@ -31,6 +32,7 @@ export function PartsReconView() {
     ["items", isStore ? "Our items" : "Store items"],
     ...(isAp ? [["tasks", "AP to-do"]] : []),
     ...(!isStore ? [["tracker", "Tracker"]] : []),
+    ...(isAp ? [["deductions", "Deductions"]] : []),
     ...(isAp ? [["import", "Import & month"]] : []),
   ];
   const current = tabs.some(([k]) => k === tab) ? tab : "items";
@@ -77,6 +79,7 @@ export function PartsReconView() {
       )}
       {current === "tasks" && isAp && <TasksPanel key={month} month={month} />}
       {current === "tracker" && <TrackerPanel key={month} month={month} />}
+      {current === "deductions" && isAp && <DeductionPanel key={month} month={month} monthRow={monthRow} />}
       {current === "import" && isAp && (
         <ImportPanel month={month} monthRow={monthRow} managesTeam={!!access.data?.manages_team}
           onImported={(m) => { setMonth(m); months.reload(); }} onChanged={months.reload} />
