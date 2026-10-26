@@ -40,6 +40,7 @@ export const KIND_LABEL = {
   ro_cost: "RO cost doesn't match the vendor invoice",
   divvy: "Divvy card charge not entered in RO Writer AP",
   arm: "SpeeDee ARM store (RO level, no store email)",
+  other: "Other bill",   // entered by AP, not on a vendor statement (migration 92)
 };
 
 // The scripts' vendor names, shown the way the Response Tracker showed them.

@@ -23,6 +23,7 @@ export const DEDUCTION_KIND = {
   ro_cost: "RO cost",
   divvy: "Divvy",
   arm: "ARM",
+  other: "Other bill",
   tracker: "Tracker line (no items)",
 };
 
