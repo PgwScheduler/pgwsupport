@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
-import { monthShort } from "./partsRecon.js";
+import { monthShort, poKind, poRo } from "./partsRecon.js";
 
 // =====================================================================
 // Reading the recon run's result workbooks (migration 90).
@@ -202,7 +202,7 @@ export function fromDetail(sheets) {
     if (vendor === "Divvy" && st === "NOT IN AP" && !unassigned && amt > 0) {
       items.push({
         import_key: ikey(`divvy|${store}|${s[SL.date] ?? ""}|${s[SL.inv] ?? ""}|${amt}|${s[SL.po] ?? ""}`), kind: "divvy",
-        recon_store: store, vendor: "Divvy", ro: str(s[SL.ro]) ?? str(s[SL.po]), invoices: str(s[SL.inv]), txn_date: s[SL.date] ?? null,
+        recon_store: store, vendor: "Divvy", ro: str(s[SL.ro]) ?? (poRo(s[SL.po]) || null), invoices: str(s[SL.inv]), txn_date: s[SL.date] ?? null,
         billed: r2(amt), amount: r2(amt),
         asked: "Enter this purchase in RO Writer AP on the correct RO (or send the receipt and RO #).",
         why: [str(s[SL.po]) && `PO / note: ${s[SL.po]}`, str(s[SL.src])].filter(Boolean).join(" - ") || null,
@@ -241,8 +241,13 @@ export function fromDetail(sheets) {
     } else if (status === "RO NOT ON PARTS DETAIL" && (num(gap) ?? 0) >= SET_ASIDE) {
       task("ro_not_on_parts_detail", store, vendor, "RO # on the vendor invoice isn't on this month's Parts Detail - still open, or a different RO?",
         invs, ro ?? pos, null, num(net), null, looks);
+    } else if (status === "NO PO - STOCK ORDER?" && (num(gap) ?? 0) >= SET_ASIDE) {
+      task("no_po", store, vendor, "No PO – stock order?", invs, "(blank)", null, num(gap), null, looks);
     } else if (status === "NO RO # ON STATEMENT" && (num(gap) ?? 0) >= SET_ASIDE) {
-      task("no_ro_on_statement", store, vendor, "Vendor charge with no RO # on it - what RO (or stock/shop) was it for?",
+      // Runs from before 10/27/2026 had no blank-PO status: a group whose POs are all blank is a "No PO" too.
+      const blank = String(pos ?? "").split(",").every((p) => poKind(p) === "blank");
+      if (blank) task("no_po", store, vendor, "No PO – stock order?", invs, "(blank)", null, num(gap), null, looks);
+      else task("no_ro_on_statement", store, vendor, "Vendor charge with no RO # on it - what RO (or stock/shop) was it for?",
         invs, pos || "(blank)", null, num(gap), null, looks);
     }
   }
@@ -325,18 +330,20 @@ const RT_STATUS = {
 const VENDOR_DISPLAY = { Napa: "NAPA", "O'Reilly's": "O'Reilly", "Advance & Carquest": "Advance / Carquest" };
 
 export function fromResponses(itemsRows, creditRows, items) {
-  // The workbook shows vendors by display name; find each item by store|vendor|RO.
+  // The workbook shows vendors by display name; find each item by store|vendor|RO
+  // (RO # cleaned like a PO, so "R0004116" in the workbook finds RO 4116).
   const byKey = new Map();
+  const roKey = (ro) => poRo(ro) || String(ro ?? "").trim();
   for (const i of items) {
     if (i.kind !== "ro_cost") continue;
-    byKey.set(`${i.recon_store}|${VENDOR_DISPLAY[i.vendor] ?? i.vendor}|${i.ro}`, i.import_key);
+    byKey.set(`${i.recon_store}|${VENDOR_DISPLAY[i.vendor] ?? i.vendor}|${roKey(i.ro)}`, i.import_key);
   }
   const responses = [], unmatched = [];
   for (const r of itemsRows) {
     if (!r[0] || r[0] === "Store") continue;
     const status = RT_STATUS[String(r[7] ?? "").trim().toLowerCase()];
     if (!status || status === "open") continue;
-    const k = byKey.get(`${r[0]}|${r[1]}|${r[2]}`);
+    const k = byKey.get(`${r[0]}|${r[1]}|${roKey(r[2])}`);
     if (!k) { unmatched.push(`${r[0]} ${r[1]} RO ${r[2]}`); continue; }
     responses.push({ import_key: k, status, credit_no: str(r[8]), credit_amt: num(r[9]), answered: str(r[10]), note: str(r[11]) });
   }

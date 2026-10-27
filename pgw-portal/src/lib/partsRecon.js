@@ -58,7 +58,29 @@ export const AP_TASK_KIND = {
   warranty_addback: "Warranty tire - add back",
   ro_not_on_parts_detail: "RO not on Parts Detail",
   no_ro_on_statement: "No RO # on statement",
+  no_po: "No PO – stock order?",   // blank PO (migration 93)
 };
+
+// PO cleanup, before any PO-to-RO match -- the same rules as the scripts'
+// parse.py (po_kind / po_ro). Trim + upper case; blank -> AP to-do;
+// SHOP/STOCK/INVENTORY/TOOL/SUPPLIES -> shop/stock, never an RO;
+// "R0004116", "RO#4116", "rd000915", "0004116" -> the RO # as an integer
+// string. Anything else ("RUSH", "RGN 245893", a name) -> review.
+const SHOP_PO = ["SHOP", "STOCK", "INVENTORY", "TOOL", "SUPPLIES"];
+const RO_PO = /^R[OD]?[\s#:-]*0*(\d+)$/;
+export function poKind(po) {
+  const p = String(po ?? "").trim().toUpperCase();
+  if (!p) return "blank";
+  if (SHOP_PO.some((w) => p.includes(w))) return "shop";
+  return poRo(p) ? "ro" : "review";
+}
+// The RO # a PO points to ("4116"), or "" when it isn't one.
+export function poRo(po) {
+  const p = String(po ?? "").trim().toUpperCase();
+  if (!p || SHOP_PO.some((w) => p.includes(w))) return "";
+  const d = RO_PO.exec(p)?.[1] ?? (/^\d+$/.test(p) ? p : "");
+  return d.replace(/^0+(?=\d)/, "");   // compared as integers: 0004116 = 4116
+}
 
 // "2026-09-01" -> "Sept 2026", matching the recon's own file names.
 export function monthShort(month) {
