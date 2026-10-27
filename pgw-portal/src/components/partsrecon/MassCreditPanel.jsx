@@ -4,7 +4,7 @@ import {
   creditApi, usePartsReconCreditBatchList, usePartsReconCreditStores, usePartsReconCreditVendors,
 } from "../../hooks/usePartsRecon.js";
 import { CREDIT_ACTIONS, creditLinesPayload, validateCredit } from "../../lib/partsReconCredit.js";
-import { vendorLabel } from "../../lib/partsRecon.js";
+import { poRo, vendorLabel } from "../../lib/partsRecon.js";
 import { Card, Field, GhostBtn, PrimaryBtn, inputCls } from "../ui.jsx";
 import { CreditBatchDialog } from "./CreditBatchDialog.jsx";
 import { Notice, Pill, StatusPill, fmt$, fmtDate } from "./shared.jsx";
@@ -78,7 +78,8 @@ export function MassCreditPanel({ defaultLocationId, onClose, onSubmitted }) {
     let live = true;
     setSearching(true);
     const t = setTimeout(async () => {
-      const r = await creditApi.candidates(h.locationId, h.vendor, query.trim());
+      // A PO-style RO # ("R0004116", "rd000915") searches as the RO # itself.
+      const r = await creditApi.candidates(h.locationId, h.vendor, poRo(query) || query.trim());
       if (!live) return;
       setSearching(false);
       if (r.error) setErr(r.error); else setFound(r.data ?? []);
